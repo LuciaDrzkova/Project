@@ -216,18 +216,25 @@ protected:
                 for (const GridCorner& corner : corners)
                 {
                     ImGui::TableNextRow();
-                    const bool selected_corner = has_selected_grid_vertex_ &&
+                    bool selected_corner = has_selected_grid_vertex_ &&
                         corner.ix == selected_grid_vertex_[0] &&
                         corner.iy == selected_grid_vertex_[1] &&
                         corner.iz == selected_grid_vertex_[2];
                     if (selected_corner)
                         ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0,
-                                               IM_COL32(190, 112, 24, 110));
-                    ImGui::TableNextColumn();
-                    if (selected_corner)
-                        ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.20f, 1.0f), "%s  *", corner.name);
-                    else
-                        ImGui::TextUnformatted(corner.name);
+                                               IM_COL32(190, 70, 30, 135));
+                    ImGui::TableSetColumnIndex(0);
+                    // Make the whole corner row clickable. Selecting a row in this
+                    // table also selects that exact grid vertex in the 3D viewer.
+                    if (ImGui::Selectable(corner.name, selected_corner,
+                                          ImGuiSelectableFlags_SpanAllColumns |
+                                          ImGuiSelectableFlags_AllowOverlap))
+                    {
+                        selected_grid_vertex_ = {corner.ix, corner.iy, corner.iz};
+                        has_selected_grid_vertex_ = true;
+                        selected_vertex_geometry_dirty_ = true;
+                        selected_corner = true;
+                    }
                     ImGui::TableNextColumn();
                     ImGui::Text("(% .3f, % .3f, % .3f)", corner.x, corner.y, corner.z);
                     ImGui::TableNextColumn();
@@ -247,8 +254,8 @@ protected:
                 }
                 ImGui::EndTable();
             }
-            ImGui::TextDisabled("The cyan outline and white points identify this cell in the 3D viewer.");
-            ImGui::TextWrapped("With Show sampling grid enabled, left-click near a visible grid intersection to select that sample vertex.");
+            ImGui::TextDisabled("The cyan outline identifies this cell; its corners are white, and the selected corner is red-orange in the 3D viewer.");
+            ImGui::TextWrapped("Click any corner row in this table to highlight that vertex in the 3D view. You can also click a visible grid intersection in the viewer.");
             if (has_selected_grid_vertex_)
             {
                 const double sx = grid_coord(selected_grid_vertex_[0], grid_resolution_, half_extent_);
@@ -265,7 +272,7 @@ protected:
                     ImGui::TextUnformatted("F(x,y,z,k) = undefined");
             }
             else
-                ImGui::TextDisabled("Selected vertex: none. Click a grid intersection in the 3D view.");
+                ImGui::TextDisabled("Selected vertex: none. Click a corner row here or a grid intersection in the 3D view.");
         }
 
         if (ImGui::CollapsingHeader("Gradient diagnostics", false))
@@ -425,9 +432,10 @@ protected:
         {
             glDisable(GL_DEPTH_TEST);
             overlay_shader_.set_uniform("alpha", 1.0f);
-            overlay_shader_.set_uniform("point_size", supported_point_size(13.0f));
+            // This marker is a real triangle-mesh sphere, not a GL_POINTS sprite.
+            // It stays visible even on drivers that support only 1-pixel points.
             glBindVertexArray(selected_grid_vertex_buffer_.vao);
-            glDrawArrays(GL_POINTS, 0, static_cast<GLsizei>(selected_grid_vertex_vertices_.size()));
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(selected_grid_vertex_vertices_.size()));
             glEnable(GL_DEPTH_TEST);
         }
 
@@ -638,18 +646,64 @@ private:
         const std::string apply_id = std::string("Apply") + id_suffix;
         const bool apply_clicked = ImGui::Button(apply_id.c_str(), ImVec2(58.0f, 0.0f));
 
+        // The first group contains examples with a single isolated real
+        // singular point at k=0 and no singular points on F=0 for k != 0.
+        // The last group preserves the original/illustrative families, some
+        // of which intentionally have non-isolated or additional singular sets.
         static const char* preset_names[] = {
-            "Cuspidal: x^3 - k y",
-            "Cone unfolding: x^2+y^2-z^2-k",
-            "Whitney-umbrella-like: x^2 z-y^2-k z",
-            "Monkey saddle: x^3-3xy^2-k",
-            "Cubic surface family"};
+            "Plane example: x^3-k*y (non-isolated)",
+            "Isolated cusp X: x^3+y^2+z^2+k*x",
+            "Isolated cusp Y: x^2+y^3+z^2+k*y",
+            "Isolated cusp Z: x^2+y^2+z^3+k*z",
+            "Quartic cusp X: x^4+y^2+z^2+k*x",
+            "Quartic cusp Y: x^2+y^4+z^2+k*y",
+            "Quartic cusp Z: x^2+y^2+z^4+k*z",
+            "Higher-order cusp: x^5+y^2+z^2+k*x",
+            "Mixed cusp Y: x^3+y^4+z^2+k*y",
+            "Mixed cusp Z: x^3+y^2+z^4+k*z",
+            "Mixed cusp X: x^2+y^3+z^4+k*x",
+            "Mixed-order Z: x^4+y^3+z^2+k*z",
+            "Mixed cubic: x^3+y^3+z^2+k*z",
+            "Level-shift cone: x^2+y^2-z^2-k",
+            "Whitney umbrella (other behavior)",
+            "Monkey saddle (z-axis at k=0)",
+            "Cubic family (also special at k=1)"};
         static const char* preset_exprs[] = {
             "x*x*x - k*y",
+            "x*x*x + y*y + z*z + k*x",
+            "x*x + y*y*y + z*z + k*y",
+            "x*x + y*y + z*z*z + k*z",
+            "x*x*x*x + y*y + z*z + k*x",
+            "x*x + y*y*y*y + z*z + k*y",
+            "x*x + y*y + z*z*z*z + k*z",
+            "x*x*x*x*x + y*y + z*z + k*x",
+            "x*x*x + y*y*y*y + z*z + k*y",
+            "x*x*x + y*y + z*z*z*z + k*z",
+            "x*x + y*y*y + z*z*z*z + k*x",
+            "x*x*x*x + y*y*y + z*z + k*z",
+            "x*x*x + y*y*y + z*z + k*z",
             "x*x + y*y - z*z - k",
             "x*x*z - y*y - k*z",
             "x*x*x - 3*x*y*y - k",
             "x*x*x + y*y*y + z*z*z - 3*k*x*y*z"};
+        static const char* preset_descriptions[] = {
+            "At k=0, F=x^3 and the whole plane x=0 is singular. This is a useful example of a non-isolated singular set, not a single singular point.",
+            "Isolated singularity: at k=0, the only real point with F=0 and grad(F)=0 is (0,0,0). For every real k != 0, the zero surface has no singular points. k multiplies x.",
+            "Isolated singularity at the origin only when k=0; for every real k != 0, the zero surface is regular. This version puts k in front of y.",
+            "Isolated singularity at the origin only when k=0; for every real k != 0, the zero surface is regular. This version puts k in front of z.",
+            "A flatter, quartic cusp. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies x.",
+            "A flatter cusp oriented along y. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies y.",
+            "A flatter cusp oriented along z. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies z.",
+            "A higher-order cusp. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies x.",
+            "Mixed cubic/quartic cusp. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies y.",
+            "Mixed cubic/quartic cusp. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies z.",
+            "Mixed-order cusp. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies x.",
+            "Mixed-order cusp. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies z.",
+            "A mixed cubic example. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies z.",
+            "At k=0 this is a cone with one isolated singular point at the origin; for k != 0 the surface is regular. Here k shifts the level instead of multiplying x, y, or z.",
+            "This is intentionally a different behavior: at k=0 the singular set includes the z-axis, and for k>0 it also has singular points away from the origin.",
+            "This expression does not depend on z, so its singularity at k=0 extends along the z-axis rather than being isolated.",
+            "The origin is singular at k=0, but this family has additional special behavior at k=1, so it does not satisfy the 'only at k=0' condition."};
         ImGui::TextUnformatted("Preset");
         ImGui::SetNextItemWidth(282.0f);
         const std::string preset_id = std::string("##Preset") + id_suffix;
@@ -657,8 +711,11 @@ private:
         {
             std::snprintf(expression_buffer_.data(), expression_buffer_.size(), "%s",
                           preset_exprs[preset_index_]);
+            // All presets are most informative at their distinguished value k=0.
+            k_ = 0.0f;
             apply_expression();
         }
+        ImGui::TextWrapped("%s", preset_descriptions[preset_index_]);
         if (entered || apply_clicked)
             apply_expression();
         if (!parse_error_.empty())
@@ -1084,11 +1141,54 @@ private:
         selected_grid_vertex_vertices_.clear();
         if (!has_selected_grid_vertex_)
             return;
-        selected_grid_vertex_vertices_.push_back(overlay_vertex(
-            grid_coord(selected_grid_vertex_[0], grid_resolution_, half_extent_),
-            grid_coord(selected_grid_vertex_[1], grid_resolution_, half_extent_),
-            grid_coord(selected_grid_vertex_[2], grid_resolution_, half_extent_),
-            1.0f, 0.28f, 0.04f));
+
+        // Center the marker exactly on the selected sample. Use a triangle sphere
+        // instead of GL_POINTS: some macOS/Metal OpenGL implementations clamp
+        // point sprites to one pixel, making a point-size-based marker invisible.
+        const double cx = grid_coord(selected_grid_vertex_[0], grid_resolution_, half_extent_);
+        const double cy = grid_coord(selected_grid_vertex_[1], grid_resolution_, half_extent_);
+        const double cz = grid_coord(selected_grid_vertex_[2], grid_resolution_, half_extent_);
+        const double spacing = (2.0 * static_cast<double>(half_extent_)) /
+                               static_cast<double>(std::max(1, grid_resolution_));
+        //const double radius = std::max(spacing * 0.18, static_cast<double>(half_extent_) * 0.012);
+        const double radius = spacing * 0.06;
+        constexpr int rings = 10;
+        constexpr int sectors = 16;
+        constexpr float red = 1.0f, green = 0.12f, blue = 0.025f;
+
+        auto point = [&](int ring, int sector)
+        {
+            const double theta = 3.14159265358979323846 * static_cast<double>(ring) / rings;
+            const double phi = 2.0 * 3.14159265358979323846 * static_cast<double>(sector) / sectors;
+            const double st = std::sin(theta);
+            return std::array<double, 3>{
+                cx + radius * st * std::cos(phi),
+                cy + radius * std::cos(theta),
+                cz + radius * st * std::sin(phi)};
+        };
+        auto add_triangle = [&](const std::array<double, 3>& a,
+                                const std::array<double, 3>& b,
+                                const std::array<double, 3>& c)
+        {
+            selected_grid_vertex_vertices_.push_back(overlay_vertex(a[0], a[1], a[2], red, green, blue));
+            selected_grid_vertex_vertices_.push_back(overlay_vertex(b[0], b[1], b[2], red, green, blue));
+            selected_grid_vertex_vertices_.push_back(overlay_vertex(c[0], c[1], c[2], red, green, blue));
+        };
+
+        for (int r = 0; r < rings; ++r)
+        {
+            for (int sec = 0; sec < sectors; ++sec)
+            {
+                const auto p00 = point(r, sec);
+                const auto p01 = point(r, sec + 1);
+                const auto p10 = point(r + 1, sec);
+                const auto p11 = point(r + 1, sec + 1);
+                if (r != 0)
+                    add_triangle(p00, p10, p01);
+                if (r != rings - 1)
+                    add_triangle(p01, p10, p11);
+            }
+        }
     }
 
     static void create_overlay_buffer(OverlayBuffer& buffer)
