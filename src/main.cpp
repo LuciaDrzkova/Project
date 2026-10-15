@@ -497,7 +497,7 @@ private:
 
     bool show_grid_ = false;
     bool show_selected_cell_ = true;
-    bool show_gradient_glyphs_ = true;
+    bool show_gradient_glyphs_ = false;
     bool setup_open_ = false;
     bool setup_popup_requested_ = false;
     bool mesh_dirty_ = true;
@@ -518,9 +518,20 @@ private:
     KSweep sweep_;
 
     pmp::Shader overlay_shader_;
-    // macOS OpenGL (including the Metal-backed driver) commonly supports
-    // only 1-pixel raster lines. Query the active driver and clamp optional
-    // line/point sizes instead of issuing invalid GL state changes each frame.
+    // Many Core Profile drivers (not just macOS: this also reproduces on
+    // Mesa/Linux) report a generous GL_ALIASED_LINE_WIDTH_RANGE (e.g. up to
+    // 255) purely for legacy/compatibility-profile compatibility, but then
+    // raise GL_INVALID_VALUE from glLineWidth() for any width other than
+    // 1.0 once the context is actually Core Profile. Trusting that range
+    // query alone (as a prior version of this code did) silently breaks:
+    // every glLineWidth(>1) call fails, leaving the line width at its
+    // last-good value and spamming "GL error: invalid value" every frame
+    // forever. Instead, actually try setting a wide line once at startup
+    // and see whether the driver accepts it; fall back to 1px if not. This
+    // mirrors the existing fallback for the selected-vertex marker, which
+    // already avoids GL_POINTS for the same class of reason (point sprite
+    // size restrictions) by drawing a real triangle-mesh sphere instead.
+    bool wide_lines_supported_ = false;
     std::array<GLfloat, 2> line_width_range_{1.0f, 1.0f};
     std::array<GLfloat, 2> point_size_range_{1.0f, 1.0f};
     OverlayBuffer grid_buffer_;
@@ -1219,6 +1230,8 @@ private:
 
     float supported_line_width(float requested) const
     {
+        if (!wide_lines_supported_)
+            return 1.0f;
         return std::clamp(requested, line_width_range_[0], line_width_range_[1]);
     }
 
@@ -1246,6 +1259,19 @@ private:
             if (!std::isfinite(range[0]) || !std::isfinite(range[1]) || range[0] < 1.0f || range[1] < range[0])
                 range = {1.0f, 1.0f};
         };
+        // The range query above is not trustworthy on its own: some Core
+        // Profile drivers report it generously (we have observed [1, 255]
+        // on Mesa) but still raise GL_INVALID_VALUE for any non-1.0 width
+        // once actually requested. Clear any pending error, try the widest
+        // width this code ever actually requests (2.5, for the selected-
+        // cell outline), and check whether the driver truly accepted it
+        // before using a non-1.0 width in a real draw call.
+        while (glGetError() != GL_NO_ERROR) {} // drain any unrelated pending error first
+        const float probe_width = std::clamp(2.5f, line_width_range_[0], line_width_range_[1]);
+        glLineWidth(probe_width);
+        wide_lines_supported_ = (glGetError() == GL_NO_ERROR);
+        glLineWidth(1.0f);
+        glGetError(); // discard; a reset to 1.0f cannot itself meaningfully fail
         sanitize_range(line_width_range_);
         sanitize_range(point_size_range_);
 
