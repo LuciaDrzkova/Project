@@ -7,6 +7,7 @@
 
 #include "Expr.h"
 #include "Isosurface.h"
+#include "SurfaceCatalogue.h"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -657,199 +658,32 @@ private:
         const std::string apply_id = std::string("Apply") + id_suffix;
         const bool apply_clicked = ImGui::Button(apply_id.c_str(), ImVec2(58.0f, 0.0f));
 
-        // The first group contains examples with a single isolated real
-        // singular point at k=0 and no singular points on F=0 for k != 0.
-        // The last group preserves the original/illustrative families, some
-        // of which intentionally have non-isolated or additional singular sets.
-        static const char* preset_names[] = {
-            "Plane example: x^3-k*y (non-isolated)",
-            "Isolated cusp X: x^3+y^2+z^2+k*x",
-            "Isolated cusp Y: x^2+y^3+z^2+k*y",
-            "Isolated cusp Z: x^2+y^2+z^3+k*z",
-            "Quartic cusp X: x^4+y^2+z^2+k*x",
-            "Quartic cusp Y: x^2+y^4+z^2+k*y",
-            "Quartic cusp Z: x^2+y^2+z^4+k*z",
-            "Higher-order cusp: x^5+y^2+z^2+k*x",
-            "Mixed cusp Y: x^3+y^4+z^2+k*y",
-            "Mixed cusp Z: x^3+y^2+z^4+k*z",
-            "Mixed cusp X: x^2+y^3+z^4+k*x",
-            "Mixed-order Z: x^4+y^3+z^2+k*z",
-            "Mixed cubic: x^3+y^3+z^2+k*z",
-            "Level-shift cone: x^2+y^2-z^2-k",
-            "Whitney umbrella (other behavior)",
-            "Monkey saddle (z-axis at k=0)",
-            "Cubic family (also special at k=1)",
-            // BEGIN EXTENDED DIAGNOSTIC SURFACE PRESETS (38)
-            "Diagnostic: Plane example x^3-k*y",
-            "Diagnostic: Isolated quadratic cusp (X)",
-            "Diagnostic: Isolated quadratic cusp (Y)",
-            "Diagnostic: Isolated quadratic cusp (Z)",
-            "Diagnostic: Quartic cusp (X)",
-            "Diagnostic: Quartic cusp (Y)",
-            "Diagnostic: Quartic cusp (Z)",
-            "Diagnostic: Higher-order anisotropic cusp",
-            "Diagnostic: Mixed-order cusp (X perturbation)",
-            "Diagnostic: Mixed-order cusp (Y perturbation)",
-            "Diagnostic: Mixed-order cusp (Z perturbation)",
-            "Diagnostic: Higher mixed-order cusp (X)",
-            "Diagnostic: Higher mixed-order cusp (Y)",
-            "Diagnostic: Higher mixed-order cusp (Z)",
-            "Diagnostic: Mixed cubic x^3+y^3+z^2+k*z",
-            "Diagnostic: Level-shift cone",
-            "Diagnostic: Whitney umbrella",
-            "Diagnostic: Monkey saddle with z unfolding",
-            "Diagnostic: Cubic family (persistent singularity)",
-            "Diagnostic: Crossing planes XY (k*z unfolding)",
-            "Diagnostic: Crossing planes YZ (k*x unfolding)",
-            "Diagnostic: Crossing planes XZ (k*y unfolding)",
-            "Diagnostic: Double cone (X linear unfolding)",
-            "Diagnostic: Double cone (Z linear unfolding)",
-            "Diagnostic: Three coordinate planes",
-            "Diagnostic: Crossing quadratic sheets",
-            "Diagnostic: Parabolic cusp",
-            "Diagnostic: Cubic cusp (X)",
-            "Diagnostic: Cubic cusp (Y)",
-            "Diagnostic: Cubic cusp (Z)",
-            "Diagnostic: Radial quartic (X perturbation)",
-            "Diagnostic: Radial quartic (Z perturbation)",
-            "Diagnostic: Degree-six isolated singularity",
-            "Diagnostic: Degree-six mixed singularity",
-            "Diagnostic: Regular control sphere (k-independent)",
-            "Diagnostic: Regular control torus (k-independent)",
-            "Diagnostic: Regular control cylinder (k-independent)",
-            "Diagnostic: Regular control hyperboloid (k-independent)",
-            // END EXTENDED DIAGNOSTIC SURFACE PRESETS (38)
-        };
-        static const char* preset_exprs[] = {
-            "x*x*x - k*y",
-            "x*x*x + y*y + z*z + k*x",
-            "x*x + y*y*y + z*z + k*y",
-            "x*x + y*y + z*z*z + k*z",
-            "x*x*x*x + y*y + z*z + k*x",
-            "x*x + y*y*y*y + z*z + k*y",
-            "x*x + y*y + z*z*z*z + k*z",
-            "x*x*x*x*x + y*y + z*z + k*x",
-            "x*x*x + y*y*y*y + z*z + k*y",
-            "x*x*x + y*y + z*z*z*z + k*z",
-            "x*x + y*y*y + z*z*z*z + k*x",
-            "x*x*x*x + y*y*y + z*z + k*z",
-            "x*x*x + y*y*y + z*z + k*z",
-            "x*x + y*y - z*z - k",
-            "x*x*z - y*y - k*z",
-            "x*x*x - 3*x*y*y - k",
-            "x*x*x + y*y*y + z*z*z - 3*k*x*y*z",
-            // BEGIN EXTENDED DIAGNOSTIC SURFACE PRESETS (38)
-            "x^3-k*y",
-            "x^2+y^2+z^2-k*x",
-            "x^2+y^2+z^2-k*y",
-            "x^2+y^2+z^2-k*z",
-            "x^4+y^2+z^2-k*x",
-            "x^2+y^4+z^2-k*y",
-            "x^2+y^2+z^4-k*z",
-            "pow(x,8)+pow(y,4)+z^2-k*x",
-            "x^4+y^2+z^4-k*x",
-            "x^4+y^4+z^2-k*y",
-            "x^2+y^4+z^4-k*z",
-            "pow(x,6)+y^2+z^4-k*x",
-            "x^2+pow(y,6)+z^4-k*y",
-            "x^4+y^4+z^2-k*z",
-            "x^3+y^3+z^2+k*z",
-            "x^2+y^2-z^2-k",
-            "x^2*z-y^2-k*z",
-            "x^3-3*x*y^2+z^2+k*z",
-            "x^3+y^3+z^3-3*k*x*y*z",
-            "x*y-k*z",
-            "y*z-k*x",
-            "x*z-k*y",
-            "x^2+y^2-z^2-k*x",
-            "x^2+y^2-z^2-k*z",
-            "x*y*z-k*(x+y+z)",
-            "x^2-y^2-k*z",
-            "x^2+y^2-z^3-k*z",
-            "x^3+y^2+z^2-k*x",
-            "x^2+y^3+z^2-k*y",
-            "x^2+y^2+z^3-k*z",
-            "pow(x*x+y*y+z*z,2)-k*x",
-            "pow(x*x+y*y+z*z,2)-k*z",
-            "pow(x,6)+pow(y,6)+pow(z,6)-k*x",
-            "pow(x,8)+pow(y,6)+z^2-k*z",
-            "x^2+y^2+z^2-0.25",
-            "pow(x*x+y*y+z*z+0.2125,2)-1.21*(x*x+y*y)",
-            "x^2+y^2-0.25",
-            "x^2+y^2-z^2-0.25",
-            // END EXTENDED DIAGNOSTIC SURFACE PRESETS (38)
-        };
-        static const char* preset_descriptions[] = {
-            "At k=0, F=x^3 and the whole plane x=0 is singular. This is a useful example of a non-isolated singular set, not a single singular point.",
-            "Isolated singularity: at k=0, the only real point with F=0 and grad(F)=0 is (0,0,0). For every real k != 0, the zero surface has no singular points. k multiplies x.",
-            "Isolated singularity at the origin only when k=0; for every real k != 0, the zero surface is regular. This version puts k in front of y.",
-            "Isolated singularity at the origin only when k=0; for every real k != 0, the zero surface is regular. This version puts k in front of z.",
-            "A flatter, quartic cusp. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies x.",
-            "A flatter cusp oriented along y. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies y.",
-            "A flatter cusp oriented along z. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies z.",
-            "A higher-order cusp. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies x.",
-            "Mixed cubic/quartic cusp. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies y.",
-            "Mixed cubic/quartic cusp. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies z.",
-            "Mixed-order cusp. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies x.",
-            "Mixed-order cusp. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies z.",
-            "A mixed cubic example. At k=0 the origin is the only singular point; for every real k != 0, the zero surface is regular. k multiplies z.",
-            "At k=0 this is a cone with one isolated singular point at the origin; for k != 0 the surface is regular. Here k shifts the level instead of multiplying x, y, or z.",
-            "This is intentionally a different behavior: at k=0 the singular set includes the z-axis, and for k>0 it also has singular points away from the origin.",
-            "This expression does not depend on z, so its singularity at k=0 extends along the z-axis rather than being isolated.",
-            "The origin is singular at k=0, but this family has additional special behavior at k=1, so it does not satisfy the 'only at k=0' condition.",
-            // BEGIN EXTENDED DIAGNOSTIC SURFACE PRESETS (38)
-            "At k=0 the zero set x=0 is singular; the -k*y term changes the gradient.",
-            "Axis-oriented isolated-point unfolding; compare positive and negative k.",
-            "Y-axis permutation of the isolated-point unfolding.",
-            "Z-axis permutation of the isolated-point unfolding.",
-            "A flatter cusp with a quartic X term.",
-            "A flatter cusp oriented along Y.",
-            "A flatter cusp oriented along Z.",
-            "Higher anisotropic powers; small |k| may require finer resolution.",
-            "Fourth-, second-, and fourth-order terms.",
-            "Fourth-, fourth-, and second-order terms.",
-            "Second-, fourth-, and fourth-order terms.",
-            "Sixth-, second-, and fourth-order terms.",
-            "Second-, sixth-, and fourth-order terms.",
-            "Fourth-, fourth-, and second-order terms.",
-            "The critical point moves to (0,0,-k/2), where F=-k^2/4 for nonzero k.",
-            "At k=0 this is a cone; k shifts the level rather than multiplying a coordinate.",
-            "For k>0, singular points also occur at (±sqrt(k),0,0).",
-            "Adds a z unfolding term to the monkey-saddle polynomial.",
-            "The origin remains singular on F=0 for every k; this is an intentional counterexample.",
-            "For nonzero k, the z derivative is -k everywhere.",
-            "Axis-permuted crossing-plane unfolding.",
-            "Axis-permuted crossing-plane unfolding.",
-            "The critical point has critical value -k^2/4.",
-            "A coordinate-directed perturbation of the double cone.",
-            "Product singularity with a linear combination unfolding.",
-            "For nonzero k, the z derivative is -k everywhere.",
-            "Combines a radial quadratic part with cubic z behavior.",
-            "Cubic cusp with the unfolding term along X.",
-            "Cubic cusp with the unfolding term along Y.",
-            "Cubic cusp with the unfolding term along Z.",
-            "Radial fourth-degree polynomial with X perturbation.",
-            "Radial fourth-degree polynomial with Z perturbation.",
-            "Even sixth-order powers with X perturbation.",
-            "An anisotropic high-order polynomial with Z perturbation.",
-            "K-independent reference sphere (radius 0.5); changing k has no effect.",
-            "K-independent smooth torus control; useful for testing closed topology.",
-            "K-independent cylinder clipped by the domain box; boundary edges are expected.",
-            "K-independent hyperboloid reference clipped by the domain box.",
-            // END EXTENDED DIAGNOSTIC SURFACE PRESETS (38)
-        };
+                // The viewer and diagnostics tests consume the same parameterized catalogue.
+        const auto& surface_presets = iso_surfaces::catalogue();
+        static std::vector<const char*> preset_names;
+        if (preset_names.empty()) {
+            preset_names.reserve(surface_presets.size());
+            for (const auto& preset : surface_presets)
+                preset_names.push_back(preset.label.c_str());
+        }
+        if (preset_index_ < 0 || preset_index_ >= static_cast<int>(surface_presets.size()))
+            preset_index_ = 0;
         ImGui::TextUnformatted("Preset");
         ImGui::SetNextItemWidth(282.0f);
         const std::string preset_id = std::string("##Preset") + id_suffix;
-        if (ImGui::Combo(preset_id.c_str(), &preset_index_, preset_names, IM_ARRAYSIZE(preset_names)))
+        if (ImGui::Combo(preset_id.c_str(), &preset_index_, preset_names.data(),
+                         static_cast<int>(preset_names.size())))
         {
+            const auto& selected = surface_presets[static_cast<std::size_t>(preset_index_)];
             std::snprintf(expression_buffer_.data(), expression_buffer_.size(), "%s",
-                          preset_exprs[preset_index_]);
-            // All presets are most informative at their distinguished value k=0.
-            k_ = 0.0f;
+                          selected.expression.c_str());
+            // Some positive-even leading forms collapse to a point at k=0;
+            // their preset-specific nonzero default makes the surface visible.
+            k_ = static_cast<float>(selected.defaultK);
             apply_expression();
         }
-        ImGui::TextWrapped("%s", preset_descriptions[preset_index_]);
+        ImGui::TextWrapped("%s", surface_presets[static_cast<std::size_t>(preset_index_)].note.c_str());
+
         if (entered || apply_clicked)
             apply_expression();
         if (!parse_error_.empty())

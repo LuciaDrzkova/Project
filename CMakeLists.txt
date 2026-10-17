@@ -51,11 +51,15 @@ add_executable(isosurface_lab_tests tests/test_isosurface.cpp)
 target_include_directories(isosurface_lab_tests PRIVATE src)
 add_test(NAME isosurface_correctness COMMAND isosurface_lab_tests)
 
-# Expanded, headless singularity/grid-phase diagnostics.
+# Expanded, headless diagnostics for parameterized isosurface families.
 add_executable(isosurface_singularity_diagnostics tests/test_singularity_diagnostics.cpp)
 target_include_directories(isosurface_singularity_diagnostics PRIVATE src)
-add_test(NAME singularity_diagnostics_smoke
-    COMMAND isosurface_singularity_diagnostics --quick --resolution 20 --out ${CMAKE_BINARY_DIR}/singularity_diagnostics_smoke_artifacts)
+add_test(
+    NAME singularity_diagnostics_smoke
+    COMMAND isosurface_singularity_diagnostics
+            --quick --resolution 20
+            --out ${CMAKE_BINARY_DIR}/singularity_diagnostics_smoke_artifacts
+)
 
 # Sweep every built-in surface through the selected k values and report
 # nearby gradients, topology diagnostics, and winning +/- k candidates.

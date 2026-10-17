@@ -1,71 +1,54 @@
-# Surface catalogue and test interpretation
+# Shared parameterized surface catalogue and diagnostics
 
-## Catalogue (38 surfaces)
+The viewer and `test_singularity_diagnostics.cpp` use `src/SurfaceCatalogue.h` as their single source of truth.
+The catalogue contains 34 parameterized families. Every expression depends on `k`; k-independent control shapes are deliberately excluded.
 
-Every family is represented by its explicit expression in `test_singularity_diagnostics.cpp` so the test is reproducible without an implicit external preset table.
+| ID | Expression | Initial k | Expected behavior |
+|---|---|---:|---|
+| `plane_x3_ky` | `x*x*x-k*y` | `0` | At k=0 the whole plane x=0 is singular; for k!=0, dF/dy=-k. |
+| `isolated_cusp_x` | `x*x*x+y*y+z*z+k*x` | `0` | The cubic cusp has an isolated singular point at the origin when k=0. |
+| `isolated_cusp_y` | `x*x+y*y*y+z*z+k*y` | `0` | Axis-permuted cubic cusp; the zero-level surface is regular for k!=0. |
+| `isolated_cusp_z` | `x*x+y*y+z*z*z+k*z` | `0` | Axis-permuted cubic cusp; the zero-level surface is regular for k!=0. |
+| `quartic_cusp_x` | `x*x*x*x+y*y+z*z+k*x` | `0` | Quartic term in X; the k=0 fiber has an isolated singularity. |
+| `quartic_cusp_y` | `x*x+y*y*y*y+z*z+k*y` | `0` | Axis-permuted quartic cusp. |
+| `quartic_cusp_z` | `x*x+y*y+z*z*z*z+k*z` | `0` | Axis-permuted quartic cusp. |
+| `higher_order_cusp` | `x*x*x*x*x+y*y+z*z+k*x` | `0` | Fifth-order X term; the critical points move off the zero level for k!=0. |
+| `mixed_cusp_y` | `x*x*x+y*y*y*y+z*z+k*y` | `0` | Mixed cubic/quartic orders with a Y-directed unfolding. |
+| `mixed_cusp_z` | `x*x*x+y*y+z*z*z*z+k*z` | `0` | Mixed cubic/quartic orders with a Z-directed unfolding. |
+| `mixed_cusp_x` | `x*x+y*y*y+z*z*z*z+k*x` | `0` | Mixed orders with a linear X perturbation. |
+| `mixed_order_z` | `x*x*x*x+y*y*y+z*z+k*z` | `0` | The critical point is (0,0,-k/2), with F=-k^2/4 for k!=0. |
+| `mixed_cubic` | `x*x*x+y*y*y+z*z+k*z` | `0` | The critical point is (0,0,-k/2), with F=-k^2/4 for k!=0. |
+| `level_shift_cone` | `x*x+y*y-z*z-k` | `0` | A cone at k=0; nonzero k shifts the critical value away from zero. |
+| `whitney_umbrella` | `x*x*z-y*y-k*z` | `0` | For k>0, two additional singular points (±sqrt(k),0,0) lie on F=0. |
+| `monkey_saddle` | `x*x*x-3*x*y*y-k` | `0` | The singular z-axis at k=0 is removed from the zero level by nonzero k. |
+| `cubic_family` | `x*x*x+y*y*y+z*z*z-3*k*x*y*z` | `0` | The origin remains singular on F=0 for every k; this is an intentional counterexample. |
+| `higher_anisotropic_cusp` | `pow(x,8)+pow(y,4)+z*z-k*x` | `0.1` | Anisotropic eighth-/fourth-/second-order unfolding. |
+| `mixed_even_cusp_x` | `x*x*x*x+y*y+z*z*z*z-k*x` | `0.1` | Anisotropic even-power singularity unfolded along X. |
+| `mixed_even_cusp_y` | `x*x*x*x+y*y*y*y+z*z-k*y` | `0.1` | Anisotropic even-power singularity unfolded along Y. |
+| `mixed_even_cusp_z` | `x*x+y*y*y*y+z*z*z*z-k*z` | `0.1` | Anisotropic even-power singularity unfolded along Z. |
+| `mixed_order_x` | `pow(x,6)+y*y+z*z*z*z-k*x` | `0.1` | Sixth-/second-/fourth-order terms, with an X-directed unfolding. |
+| `mixed_order_y` | `x*x+pow(y,6)+z*z*z*z-k*y` | `0.1` | Second-/sixth-/fourth-order terms, with a Y-directed unfolding. |
+| `mixed_even_order_z` | `x*x*x*x+y*y*y*y+z*z-k*z` | `0.1` | A mixed-order cousin of the existing mixed-order Z preset. |
+| `monkey_saddle_z_unfolding` | `x*x*x-3*x*y*y+z*z+k*z` | `0` | A genuinely different unfolding from the original level-shifted monkey saddle. |
+| `crossing_planes_xy` | `x*y-k*z` | `0` | At nonzero k, dF/dz=-k everywhere, so the zero level is a graph. |
+| `double_cone_x_shift` | `x*x+y*y-z*z-k*x` | `0.1` | Coordinate-directed unfolding of the double cone; initially shown at k=0.1. |
+| `double_cone_z_shift` | `x*x+y*y-z*z-k*z` | `0.1` | Z-directed unfolding of the double cone; initially shown at k=0.1. |
+| `triple_plane_unfolding` | `x*y*z-k*(x+y+z)` | `0` | Product singularity unfolding of the three coordinate planes. |
+| `quadratic_crossing_unfolding` | `x*x-y*y-k*z` | `0.1` | For nonzero k, dF/dz=-k everywhere; the crossing opens into a graph. |
+| `parabolic_cusp` | `x*x+y*y-z*z*z-k*z` | `0` | The k=0 fiber is a parabolic cusp; nonzero k changes its local geometry. |
+| `radial_quartic_x` | `pow(x*x+y*y+z*z,2)-k*x` | `0.1` | A radially symmetric fourth-degree field unfolded along X. |
+| `degree_six_isolated` | `pow(x,6)+pow(y,6)+pow(z,6)-k*x` | `0.1` | A higher-degree positive-definite form; nonzero default k keeps the surface visible. |
+| `degree_six_mixed` | `pow(x,8)+pow(y,6)+z*z-k*z` | `0.1` | An anisotropic high-order form unfolded along Z. |
 
-| ID | Expression | Expected analytic interpretation |
-|---|---|---|
-| `plane_x3_ky` | `x^3-k*y` | Regular zero level for nonzero k; the origin's gradient is `(0,-k,0)`. |
-| `isolated_cusp_x` | `x^2+y^2+z^2-k*x` | Isolated point at k=0; regular small sphere for k!=0. |
-| `isolated_cusp_y` | `x^2+y^2+z^2-k*y` | Axis-permuted isolated-point unfolding. |
-| `isolated_cusp_z` | `x^2+y^2+z^2-k*z` | Axis-permuted isolated-point unfolding. |
-| `quartic_cusp_x` | `x^4+y^2+z^2-k*x` | Higher-order isolated point; regular zero level for k!=0. |
-| `quartic_cusp_y` | `x^2+y^4+z^2-k*y` | Axis-permuted quartic cusp. |
-| `quartic_cusp_z` | `x^2+y^2+z^4-k*z` | Axis-permuted quartic cusp. |
-| `higher_order_cusp` | `x^8+y^4+z^2-k*x` | High-order anisotropic isolated singularity. |
-| `mixed_cusp_x` | `x^4+y^2+z^4-k*x` | Different even orders per coordinate. |
-| `mixed_cusp_y` | `x^4+y^4+z^2-k*y` | Different even orders per coordinate. |
-| `mixed_cusp_z` | `x^2+y^4+z^4-k*z` | Different even orders per coordinate. |
-| `mixed_order_x` | `x^6+y^2+z^4-k*x` | Higher mixed-order unfolding. |
-| `mixed_order_y` | `x^2+y^6+z^4-k*y` | Higher mixed-order unfolding. |
-| `mixed_order_z` | `x^4+y^4+z^2-k*z` | Higher mixed-order unfolding. |
-| `mixed_cubic` | `x^3+y^3+z^2+k*z` | For k!=0 the critical point `(0,0,-k/2)` has value `-k^2/4`, not zero. |
-| `level_shift_cone` | `x^2+y^2-z^2-k` | Cone singularity at k=0; critical value `-k` for nonzero k. |
-| `whitney_umbrella` | `x^2*z-y^2-k*z` | At k>0, two singular zero-level points `(±sqrt(k),0,0)` remain. |
-| `monkey_saddle` | `x^3-3*x*y^2+z^2+k*z` | Origin singular at k=0; for nonzero k the critical value at `(0,0,-k/2)` is `-k^2/4`. |
-| `cubic_family` | `x^3+y^3+z^3-3*k*x*y*z` | Origin singular for every k; it cannot satisfy a full singularity-removal requirement. |
-| `crossing_planes_xy` | `x*y-k*z` | For k!=0, `dF/dz=-k` guarantees regularity. |
-| `crossing_planes_yz` | `y*z-k*x` | Axis-permuted regular unfolding. |
-| `crossing_planes_xz` | `x*z-k*y` | Axis-permuted regular unfolding. |
-| `double_cone_x_shift` | `x^2+y^2-z^2-k*x` | The critical point's value is `-k^2/4`. |
-| `double_cone_z_shift` | `x^2+y^2-z^2-k*z` | Critical value differs from zero for k!=0. |
-| `triple_plane_unfolding` | `x*y*z-k*(x+y+z)` | Product singularity with linear unfolding; inspected numerically and by its critical equations. |
-| `quadratic_crossing_unfolding` | `x^2-y^2-k*z` | For k!=0, `dF/dz=-k` guarantees regularity. |
-| `parabolic_cusp` | `x^2+y^2-z^3-k*z` | Cusp-like noncompact surface; real critical points for k<0 have nonzero values. |
-| `elliptic_cusp_x` | `x^3+y^2+z^2-k*x` | Cubic cusp unfolding. |
-| `elliptic_cusp_y` | `x^2+y^3+z^2-k*y` | Axis-permuted cubic cusp. |
-| `elliptic_cusp_z` | `x^2+y^2+z^3-k*z` | Axis-permuted cubic cusp. |
-| `radial_quartic_x` | `(x^2+y^2+z^2)^2-k*x` | Radial quartic isolated-point unfolding. |
-| `radial_quartic_z` | `(x^2+y^2+z^2)^2-k*z` | Axis-permuted radial quartic. |
-| `degree_six_isolated` | `x^6+y^6+z^6-k*x` | High even-degree isolated singularity. |
-| `degree_six_mixed` | `x^8+y^6+z^2-k*z` | High-order anisotropic case. |
-| `sphere_control` | `x^2+y^2+z^2-0.25` | Smooth closed reference surface. |
-| `torus_control` | `(x^2+y^2+z^2+0.2125)^2-1.21(x^2+y^2)` | Smooth polynomial torus, major radius 0.55 and tube radius 0.30. |
-| `cylinder_control` | `x^2+y^2-0.25` | Smooth open surface after clipping to the box. |
-| `hyperboloid_control` | `x^2+y^2-z^2-0.25` | Smooth clipped saddle-like reference surface. |
+## Running
 
-## Analytical critical-point witness assessment
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target isosurface_lab isosurface_singularity_diagnostics
+ctest --test-dir build --output-on-failure -R 'singularity_diagnostics_smoke'
+./build/isosurface_singularity_diagnostics --resolution 48 --out singularity_diagnostics_artifacts
+```
 
-`singularity_assessment.csv` records, for each evaluated surface/k pair, the catalog-specific closed-form critical-point candidates, their field values, gradient magnitudes, and whether any witness satisfies both F=0 and grad F=0 within scale-aware tolerances. The rules enumerate the real critical points for each listed family, with a representative point where the critical set is a line, axis, or circle. This is deliberately **not** a generic symbolic solver for arbitrary user expressions. A new surface added to the catalogue must also get a critical-point rule; otherwise the row is marked `UNASSESSED_NO_CRITICAL_POINT_RULE` and the analytic smoke check fails.
+A small set of positive-even leading forms uses an initial `k=0.1` in the viewer, because the zero-level set at `k=0` would be only the origin and therefore look like an empty/point-like duplicate. Their tests still include `k=0` as the singular reference.
 
-`EXPECTED_SINGULARITY_WITNESS_FOUND` means the expected singularity has an explicit critical-point witness. `NO_SINGULAR_WITNESS_ON_ZERO_LEVEL` means the catalogue's critical-point rule found no critical witness on F=0; inspect the rule text for the reason. `UNEXPECTED_SINGULARITY_WITNESS_FOUND` is a regression signal. The CSV also reports the origin separately so persistent-origin families are easy to identify.
-
-## Why add grid-phase tests?
-
-The original extractor samples a symmetric grid from `[-h,h]`. If exact zeros lie on grid vertices or grid-aligned curves, edge interpolation can collapse otherwise distinct edge crossings to the same location. To probe that, phase tests use the same expression with `x`, `y`, and `z` translated by fractions of a cell width. This shifts the surface relative to the same grid. The test records metrics; it does not assume that shifting must improve the result.
-
-The Mixed cubic family is important because `F(t,-t,0)=0` for all t, including the grid-aligned line through the origin. For nonzero k, the gradient along that line is `(3t^2,3t^2,k)`, so it is regular. If anomalies change strongly as the surface is shifted by a fraction of a cell, exact-zero alignment is implicated.
-
-## What each metric means
-
-- `boundary_edges`: all edges incident to one triangle; many are expected on surfaces clipped by the domain box.
-- `interior_boundary_edges`: edges incident to one triangle that do not appear to lie on the clipping box; these are more suspicious.
-- `nonmanifold_edges`: edges incident to more than two triangles.
-- `orientation_conflicts`: an edge incident to two triangles with the same directed orientation in both triangles.
-- `near_degenerate_triangles`: output triangles whose area is very small relative to the square of a grid cell.
-- `skipped_degenerate_triangles`: triangle candidates dropped by the existing production guard before entering the output mesh; `skipped_degenerate_triangles.csv` records all three candidate positions and area for focused/phase diagnostic runs.
-- `phase_variation.csv`: range of each tracked metric over the phase variants; `topology_phase_sensitive=1` means interior-boundary, nonmanifold, orientation-conflict, or skipped-degenerate counts changed with phase.
-- `min_gradient`: minimum analytic gradient magnitude at vertices of the emitted mesh. It is a mesh sample, not a certified minimum over the continuous surface.
-
-No single mesh metric proves a mathematical singularity. Interpret these alongside the expression's analytic properties and the geometric resolution.
+Analytical checks are catalog-specific witness checks, not a general symbolic proof engine. Mesh topology findings should be read separately from analytical singularity results.

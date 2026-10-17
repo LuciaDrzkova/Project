@@ -15,6 +15,7 @@
 
 #include "Expr.h"
 #include "Isosurface.h"
+#include "SurfaceCatalogue.h"
 
 #include <algorithm>
 #include <array>
@@ -42,113 +43,9 @@ static int g_failures = 0;
 
 constexpr double kDomainHalfExtent = 1.0;
 
-enum class Behavior {
-    RegularForNonzeroK, // Known one-parameter unfolding; regular zero level for k != 0.
-    WhitneyUmbrella,    // k>0 has two additional real singular points on F=0.
-    PersistentOrigin,   // Origin remains singular for every k.
-    RegularControl      // k is absent; regular reference geometry.
-};
-
-struct SurfaceCase {
-    std::string id;
-    std::string label;
-    std::string expression;
-    Behavior behavior;
-    std::string note;
-};
-
-// 38 explicit surfaces: 34 parameterized unfoldings plus four regular control shapes.
-// Each expression is parsed by the application's own expression parser.
-static const std::vector<SurfaceCase>& catalogue() {
-    static const std::vector<SurfaceCase> data = {
-        {"plane_x3_ky", "Plane example: x^3-k*y", "x^3-k*y", Behavior::RegularForNonzeroK,
-         "At k=0 the zero set x=0 is singular; grad_y=-k unfolds it."},
-
-        {"isolated_cusp_x", "Isolated quadratic cusp, X direction", "x^2+y^2+z^2-k*x", Behavior::RegularForNonzeroK,
-         "The zero set is a small sphere through the origin at k=0's limiting point."},
-        {"isolated_cusp_y", "Isolated quadratic cusp, Y direction", "x^2+y^2+z^2-k*y", Behavior::RegularForNonzeroK,
-         "Axis-permuted isolated point unfolding."},
-        {"isolated_cusp_z", "Isolated quadratic cusp, Z direction", "x^2+y^2+z^2-k*z", Behavior::RegularForNonzeroK,
-         "Axis-permuted isolated point unfolding."},
-
-        {"quartic_cusp_x", "Quartic cusp, X direction", "x^4+y^2+z^2-k*x", Behavior::RegularForNonzeroK,
-         "Positive-definite even powers with a linear unfolding term."},
-        {"quartic_cusp_y", "Quartic cusp, Y direction", "x^2+y^4+z^2-k*y", Behavior::RegularForNonzeroK,
-         "Axis-permuted quartic cusp."},
-        {"quartic_cusp_z", "Quartic cusp, Z direction", "x^2+y^2+z^4-k*z", Behavior::RegularForNonzeroK,
-         "Axis-permuted quartic cusp."},
-        {"higher_order_cusp", "Higher-order cusp", "pow(x,8)+pow(y,4)+z^2-k*x", Behavior::RegularForNonzeroK,
-         "Higher anisotropic order; use higher resolutions for small |k|."},
-
-        {"mixed_cusp_x", "Mixed-order isolated cusp, X perturbation", "x^4+y^2+z^4-k*x", Behavior::RegularForNonzeroK,
-         "Different even orders in each coordinate."},
-        {"mixed_cusp_y", "Mixed-order isolated cusp, Y perturbation", "x^4+y^4+z^2-k*y", Behavior::RegularForNonzeroK,
-         "Different even orders in each coordinate."},
-        {"mixed_cusp_z", "Mixed-order isolated cusp, Z perturbation", "x^2+y^4+z^4-k*z", Behavior::RegularForNonzeroK,
-         "Different even orders in each coordinate."},
-        {"mixed_order_x", "Higher mixed-order cusp, X perturbation", "pow(x,6)+y^2+z^4-k*x", Behavior::RegularForNonzeroK,
-         "Sixth-, second-, and fourth-order terms."},
-        {"mixed_order_y", "Higher mixed-order cusp, Y perturbation", "x^2+pow(y,6)+z^4-k*y", Behavior::RegularForNonzeroK,
-         "Second-, sixth-, and fourth-order terms."},
-        {"mixed_order_z", "Higher mixed-order cusp, Z perturbation", "x^4+y^4+z^2-k*z", Behavior::RegularForNonzeroK,
-         "Fourth-, fourth-, and second-order terms."},
-
-        {"mixed_cubic", "Mixed cubic: x^3+y^3+z^2+k*z", "x^3+y^3+z^2+k*z", Behavior::RegularForNonzeroK,
-         "Critical point (0,0,-k/2) has F=-k^2/4, off F=0 for k!=0."},
-        {"level_shift_cone", "Level-shift cone", "x^2+y^2-z^2-k", Behavior::RegularForNonzeroK,
-         "At k=0 the cone is singular at the origin."},
-        {"whitney_umbrella", "Whitney umbrella", "x^2*z-y^2-k*z", Behavior::WhitneyUmbrella,
-         "For k>0, (±sqrt(k),0,0) are singular points on the zero level."},
-        {"monkey_saddle", "Monkey-saddle-type unfolding", "x^3-3*x*y^2+z^2+k*z", Behavior::RegularForNonzeroK,
-         "The origin is singular at k=0; for k!=0 the critical point is off F=0."},
-        {"cubic_family", "Cubic family", "x^3+y^3+z^3-3*k*x*y*z", Behavior::PersistentOrigin,
-         "The origin has F=0 and grad F=0 for every k; do not expect full regularization."},
-
-        {"crossing_planes_xy", "Crossing planes, XY to graph unfolding", "x*y-k*z", Behavior::RegularForNonzeroK,
-         "For k!=0, partial F/partial z=-k everywhere."},
-        {"crossing_planes_yz", "Crossing planes, YZ to graph unfolding", "y*z-k*x", Behavior::RegularForNonzeroK,
-         "Axis-permuted crossing-plane unfolding."},
-        {"crossing_planes_xz", "Crossing planes, XZ to graph unfolding", "x*z-k*y", Behavior::RegularForNonzeroK,
-         "Axis-permuted crossing-plane unfolding."},
-        {"double_cone_x_shift", "Double cone with X linear unfolding", "x^2+y^2-z^2-k*x", Behavior::RegularForNonzeroK,
-         "The unique critical point has value -k^2/4."},
-        {"double_cone_z_shift", "Double cone with Z linear unfolding", "x^2+y^2-z^2-k*z", Behavior::RegularForNonzeroK,
-         "The critical point is not on F=0 for k!=0."},
-        {"triple_plane_unfolding", "Three coordinate planes unfolding", "x*y*z-k*(x+y+z)", Behavior::RegularForNonzeroK,
-         "Explores a product singularity; analytic classification is tested at its known critical points."},
-        {"quadratic_crossing_unfolding", "Crossing quadratic sheets unfolding", "x^2-y^2-k*z", Behavior::RegularForNonzeroK,
-         "For k!=0, partial F/partial z=-k everywhere."},
-
-        {"parabolic_cusp", "Parabolic cusp unfolding", "x^2+y^2-z^3-k*z", Behavior::RegularForNonzeroK,
-         "Critical points, when real, have nonzero critical values for k!=0."},
-        {"elliptic_cusp_x", "Cubic cusp, X direction", "x^3+y^2+z^2-k*x", Behavior::RegularForNonzeroK,
-         "Critical points for k>0 have nonzero critical values."},
-        {"elliptic_cusp_y", "Cubic cusp, Y direction", "x^2+y^3+z^2-k*y", Behavior::RegularForNonzeroK,
-         "Axis-permuted cubic cusp."},
-        {"elliptic_cusp_z", "Cubic cusp, Z direction", "x^2+y^2+z^3-k*z", Behavior::RegularForNonzeroK,
-         "Axis-permuted cubic cusp."},
-
-        {"radial_quartic_x", "Radial quartic unfolding, X direction", "pow(x*x+y*y+z*z,2)-k*x", Behavior::RegularForNonzeroK,
-         "Radial quartic with a linear perturbation."},
-        {"radial_quartic_z", "Radial quartic unfolding, Z direction", "pow(x*x+y*y+z*z,2)-k*z", Behavior::RegularForNonzeroK,
-         "Axis-permuted radial quartic."},
-        {"degree_six_isolated", "Degree-six isolated singularity", "pow(x,6)+pow(y,6)+pow(z,6)-k*x", Behavior::RegularForNonzeroK,
-         "A compact regular level for k!=0."},
-        {"degree_six_mixed", "Degree-six mixed singularity", "pow(x,8)+pow(y,6)+z^2-k*z", Behavior::RegularForNonzeroK,
-         "Anisotropic high-order case."},
-
-        {"sphere_control", "Regular control: sphere", "x^2+y^2+z^2-0.25", Behavior::RegularControl,
-         "k-independent control for watertightness and normal orientation."},
-        {"torus_control", "Regular control: torus", "pow(x*x+y*y+z*z+0.2125,2)-1.21*(x*x+y*y)", Behavior::RegularControl,
-         "Smooth algebraic genus-1 torus control (major radius 0.55, tube radius 0.30)."},
-        {"cylinder_control", "Regular control: cylinder", "x^2+y^2-0.25", Behavior::RegularControl,
-         "Open in the clipped domain; boundary edges are expected at the box."},
-        {"hyperboloid_control", "Regular control: hyperboloid", "x^2+y^2-z^2-0.25", Behavior::RegularControl,
-         "Regular clipped reference with nontrivial saddle geometry."}
-    };
-    return data;
-}
-
+using Behavior = iso_surfaces::Behavior;
+using SurfaceCase = iso_surfaces::SurfaceCase;
+static const std::vector<SurfaceCase>& catalogue() { return iso_surfaces::catalogue(); }
 struct Vec3 { double x, y, z; };
 struct Color { unsigned char r, g, b; };
 
@@ -183,8 +80,6 @@ static std::string behaviorFor(const SurfaceCase& s, double k) {
             return "singular z-axis at k=0";
         case Behavior::PersistentOrigin:
             return "origin remains singular for every k";
-        case Behavior::RegularControl:
-            return "regular control; k absent from expression";
     }
     return "unknown";
 }
@@ -198,10 +93,6 @@ static double signedNthRoot(double value, int n) {
     return std::copysign(std::pow(std::fabs(value), 1.0/static_cast<double>(n)), value);
 }
 
-// Closed-form critical-point witnesses for each catalogue equation. For a
-// continuous critical locus (e.g. an axis), one point is stored as a witness
-// and locusNote states that it represents a larger set. These rules are
-// catalog-specific; this is not a general symbolic solver for arbitrary F.
 static bool criticalWitnesses(const SurfaceCase& s, double k,
                               std::vector<CriticalWitness>& out, std::string& rule) {
     const double eps = 1e-14;
@@ -209,97 +100,105 @@ static bool criticalWitnesses(const SurfaceCase& s, double k,
     const auto add = [&](double x, double y, double z, const std::string& note = "isolated critical point") {
         out.push_back({Vec3{x,y,z}, note});
     };
-    const std::string& id=s.id;
+    const std::string& id = s.id;
 
-    if (id=="plane_x3_ky") {
-        rule = zero ? "at k=0, origin witnesses the singular plane x=0" : "for k!=0, partial F/partial y=-k, so no critical point exists";
+    if (id == "plane_x3_ky") {
+        rule = zero ? "origin represents the singular plane x=0" : "dF/dy=-k is nonzero everywhere";
         if (zero) add(0,0,0,"representative of singular plane x=0");
-    } else if (id=="isolated_cusp_x") { rule="critical point x=k/2"; add(k/2,0,0); }
-    else if (id=="isolated_cusp_y") { rule="critical point y=k/2"; add(0,k/2,0); }
-    else if (id=="isolated_cusp_z") { rule="critical point z=k/2"; add(0,0,k/2); }
-    else if (id=="quartic_cusp_x") { rule="critical point x=cbrt(k/4)"; add(std::cbrt(k/4),0,0); }
-    else if (id=="quartic_cusp_y") { rule="critical point y=cbrt(k/4)"; add(0,std::cbrt(k/4),0); }
-    else if (id=="quartic_cusp_z") { rule="critical point z=cbrt(k/4)"; add(0,0,std::cbrt(k/4)); }
-    else if (id=="higher_order_cusp") { rule="critical point x=seventh_root(k/8)"; add(signedNthRoot(k/8,7),0,0); }
-    else if (id=="mixed_cusp_x") { rule="critical point x=cbrt(k/4)"; add(std::cbrt(k/4),0,0); }
-    else if (id=="mixed_cusp_y") { rule="critical point y=cbrt(k/4)"; add(0,std::cbrt(k/4),0); }
-    else if (id=="mixed_cusp_z") { rule="critical point z=cbrt(k/4)"; add(0,0,std::cbrt(k/4)); }
-    else if (id=="mixed_order_x") { rule="critical point x=fifth_root(k/6)"; add(signedNthRoot(k/6,5),0,0); }
-    else if (id=="mixed_order_y" || id=="degree_six_isolated") {
-        rule="critical point on the perturbed axis: fifth_root(k/6)";
-        if (id=="mixed_order_y") add(0,signedNthRoot(k/6,5),0);
-        else add(signedNthRoot(k/6,5),0,0);
-    } else if (id=="mixed_order_z" || id=="degree_six_mixed") {
-        rule="critical point z=k/2"; add(0,0,k/2);
-    } else if (id=="mixed_cubic" || id=="monkey_saddle") {
-        rule="critical point (0,0,-k/2), with critical value -k^2/4"; add(0,0,-k/2);
-    } else if (id=="level_shift_cone") {
-        rule="origin is the only critical point; its level value is -k"; add(0,0,0);
-    } else if (id=="whitney_umbrella") {
-        if (k>eps) {
-            rule="two real critical points x=+/-sqrt(k) on z=0";
+    } else if (id == "isolated_cusp_x" || id == "isolated_cusp_y" || id == "isolated_cusp_z") {
+        const char axis = id.back();
+        if (k < -eps) {
+            const double r = std::sqrt(-k/3.0);
+            rule = "two critical points on the cubic perturbed axis, with nonzero critical values";
+            if (axis == 'x') { add(r,0,0); add(-r,0,0); }
+            else if (axis == 'y') { add(0,r,0); add(0,-r,0); }
+            else { add(0,0,r); add(0,0,-r); }
+        } else if (zero) { rule = "origin is the singular critical point at k=0"; add(0,0,0); }
+        else rule = "the axis derivative cannot vanish for k>0";
+    } else if (id == "quartic_cusp_x" || id == "quartic_cusp_y" || id == "quartic_cusp_z") {
+        const double r = std::cbrt(-k/4.0);
+        rule = "one critical point on the quartic perturbed axis; its value is nonzero for k!=0";
+        if (id == "quartic_cusp_x") add(r,0,0);
+        else if (id == "quartic_cusp_y") add(0,r,0);
+        else add(0,0,r);
+    } else if (id == "higher_order_cusp") {
+        if (k < -eps) {
+            const double r = std::pow(-k/5.0, 0.25);
+            rule = "two fourth-root critical points on X, with nonzero values";
+            add(r,0,0); add(-r,0,0);
+        } else if (zero) { rule = "origin is the singular critical point at k=0"; add(0,0,0); }
+        else rule = "5*x^4+k cannot vanish for k>0";
+    } else if (id == "mixed_cusp_x") {
+        rule = "critical point x=-k/2, with F=-k^2/4"; add(-k/2,0,0);
+    } else if (id == "mixed_cusp_y") {
+        rule = "critical point y=cbrt(-k/4), with nonzero critical value for k!=0"; add(0,std::cbrt(-k/4.0),0);
+    } else if (id == "mixed_cusp_z") {
+        rule = "critical point z=cbrt(-k/4), with nonzero critical value for k!=0"; add(0,0,std::cbrt(-k/4.0));
+    } else if (id == "mixed_order_z") {
+        rule = "critical point z=-k/2, with F=-k^2/4"; add(0,0,-k/2);
+    } else if (id == "mixed_cubic" || id == "monkey_saddle_z_unfolding") {
+        rule = "critical point (0,0,-k/2), with critical value -k^2/4"; add(0,0,-k/2);
+    } else if (id == "level_shift_cone") {
+        rule = "origin is the only critical point, with level value -k"; add(0,0,0);
+    } else if (id == "whitney_umbrella") {
+        if (k > eps) {
+            rule = "two real singular points x=+/-sqrt(k) on z=0";
             add(std::sqrt(k),0,0,"positive-k singular point");
             add(-std::sqrt(k),0,0,"negative-x positive-k singular point");
         } else if (zero) {
-            rule="critical z-axis x=y=0; origin is one representative";
+            rule = "critical z-axis x=y=0; origin is one representative";
             add(0,0,0,"representative of singular z-axis");
-        } else {
-            rule="x^2=k has no real solution for k<0, so no real critical point exists";
-        }
-    } else if (id=="cubic_family") {
-        rule="origin is singular for every k; at k=1 the real singular locus also includes x=y=z";
+        } else rule = "x^2=k has no real solution for k<0";
+    } else if (id == "monkey_saddle") {
+        rule = "critical z-axis x=y=0; F=-k along it";
+        add(0,0,0,"representative of critical z-axis");
+    } else if (id == "cubic_family") {
+        rule = "origin is singular for every k; at k=1 there is an additional diagonal singular locus";
         add(0,0,0,"persistent singular origin");
-        if (std::fabs(k-1.0)<=eps) add(1,1,1,"witness on additional singular line x=y=z at k=1");
-    } else if (id=="crossing_planes_xy" || id=="crossing_planes_yz" || id=="crossing_planes_xz" || id=="quadratic_crossing_unfolding") {
-        if (zero) {
-            rule="at k=0, origin witnesses the crossing singular locus";
-            add(0,0,0,"representative of singular axis or crossing locus");
-        } else {
-            rule="for k!=0, one partial derivative is the nonzero constant +/-k, so no critical point exists";
-        }
-    } else if (id=="double_cone_x_shift") {
-        rule="critical point x=k/2 with critical value -k^2/4"; add(k/2,0,0);
-    } else if (id=="double_cone_z_shift") {
-        rule="critical point z=-k/2 with critical value +k^2/4"; add(0,0,-k/2);
-    } else if (id=="triple_plane_unfolding") {
-        if (k>eps) {
-            rule="two real critical points (+/-sqrt(k), +/-sqrt(k), +/-sqrt(k)); critical values are nonzero";
-            add(std::sqrt(k),std::sqrt(k),std::sqrt(k),"positive diagonal critical point");
-            add(-std::sqrt(k),-std::sqrt(k),-std::sqrt(k),"negative diagonal critical point");
-        } else if (zero) {
-            rule="at k=0, the coordinate axes are singular; origin is one representative";
-            add(0,0,0,"representative of singular coordinate axes");
-        } else {
-            rule="for k<0, pairwise products cannot all equal k, so there is no real critical point";
-        }
-    } else if (id=="parabolic_cusp") {
-        if (k< -eps) {
-            rule="critical points z=+/-sqrt(-k/3), whose critical values are nonzero";
-            const double z=std::sqrt(-k/3.0); add(0,0,z); add(0,0,-z);
-        } else if (zero) { rule="origin is the singular critical point at k=0"; add(0,0,0); }
-        else rule="for k>0, -3z^2-k cannot vanish, so there is no real critical point";
-    } else if (id=="elliptic_cusp_x" || id=="elliptic_cusp_y" || id=="elliptic_cusp_z") {
-        if (k>eps) {
-            rule="two critical points on the perturbed axis at +/-sqrt(k/3), with nonzero critical values";
-            const double r=std::sqrt(k/3.0);
-            if (id=="elliptic_cusp_x") { add(r,0,0); add(-r,0,0); }
-            else if (id=="elliptic_cusp_y") { add(0,r,0); add(0,-r,0); }
-            else { add(0,0,r); add(0,0,-r); }
-        } else if (zero) { rule="origin is singular at k=0"; add(0,0,0); }
-        else rule="for k<0, derivative 3u^2-k cannot vanish on the perturbed axis";
-    } else if (id=="radial_quartic_x") {
-        rule="critical point x=cbrt(k/4) on the x-axis"; add(std::cbrt(k/4),0,0);
-    } else if (id=="radial_quartic_z") {
-        rule="critical point z=cbrt(k/4) on the z-axis"; add(0,0,std::cbrt(k/4));
-    } else if (id=="sphere_control" || id=="cylinder_control" || id=="hyperboloid_control") {
-        rule="origin represents the critical point (or critical axis); it is not on the zero level";
-        add(0,0,0,"representative of off-level critical set");
-    } else if (id=="torus_control") {
-        rule="smooth polynomial torus field: origin and critical circle r=sqrt(0.55^2+0.30^2),z=0 are off the zero level";
-        add(0,0,0,"isolated critical point at the origin");
-        add(std::sqrt(0.55*0.55+0.30*0.30),0,0,"representative of critical circle");
+        if (std::fabs(k-1.0) <= eps) add(1,1,1,"witness on additional singular line x=y=z at k=1");
+    } else if (id == "higher_anisotropic_cusp") {
+        rule = "critical point x=seventh_root(k/8), with nonzero critical value for k!=0"; add(signedNthRoot(k/8.0,7),0,0);
+    } else if (id == "mixed_even_cusp_x") {
+        rule = "critical point x=cbrt(k/4)"; add(std::cbrt(k/4.0),0,0);
+    } else if (id == "mixed_even_cusp_y") {
+        rule = "critical point y=cbrt(k/4)"; add(0,std::cbrt(k/4.0),0);
+    } else if (id == "mixed_even_cusp_z") {
+        rule = "critical point z=cbrt(k/4)"; add(0,0,std::cbrt(k/4.0));
+    } else if (id == "mixed_order_x") {
+        rule = "critical point x=fifth_root(k/6)"; add(signedNthRoot(k/6.0,5),0,0);
+    } else if (id == "mixed_order_y") {
+        rule = "critical point y=fifth_root(k/6)"; add(0,signedNthRoot(k/6.0,5),0);
+    } else if (id == "mixed_even_order_z") {
+        rule = "critical point z=k/2, with F=-k^2/4"; add(0,0,k/2);
+    } else if (id == "crossing_planes_xy" || id == "quadratic_crossing_unfolding") {
+        if (zero) { rule = "origin witnesses the crossing singular locus at k=0"; add(0,0,0,"representative of crossing locus"); }
+        else rule = "dF/dz=-k is nonzero everywhere";
+    } else if (id == "double_cone_x_shift") {
+        rule = "critical point x=k/2, with critical value -k^2/4"; add(k/2,0,0);
+    } else if (id == "double_cone_z_shift") {
+        rule = "critical point z=-k/2, with critical value +k^2/4"; add(0,0,-k/2);
+    } else if (id == "triple_plane_unfolding") {
+        if (k > eps) {
+            const double r = std::sqrt(k);
+            rule = "two diagonal critical points for k>0, with nonzero values";
+            add(r,r,r,"positive diagonal critical point"); add(-r,-r,-r,"negative diagonal critical point");
+        } else if (zero) { rule = "origin witnesses the coordinate-plane singular axes"; add(0,0,0,"representative of singular coordinate axes"); }
+        else rule = "for k<0 the three pairwise products cannot all equal k";
+    } else if (id == "parabolic_cusp") {
+        if (k < -eps) {
+            const double r = std::sqrt(-k/3.0);
+            rule = "critical points z=+/-sqrt(-k/3), with nonzero critical values";
+            add(0,0,r); add(0,0,-r);
+        } else if (zero) { rule = "origin is the singular critical point at k=0"; add(0,0,0); }
+        else rule = "-3*z^2-k cannot vanish for k>0";
+    } else if (id == "radial_quartic_x") {
+        rule = "critical point x=cbrt(k/4)"; add(std::cbrt(k/4.0),0,0);
+    } else if (id == "degree_six_isolated") {
+        rule = "critical point x=fifth_root(k/6)"; add(signedNthRoot(k/6.0,5),0,0);
+    } else if (id == "degree_six_mixed") {
+        rule = "critical point z=k/2, with nonzero critical value for k!=0"; add(0,0,k/2);
     } else {
-        rule="no catalog-specific critical-point rule is implemented";
+        rule = "no catalog-specific critical-point rule is implemented";
         return false;
     }
     return true;
@@ -311,7 +210,6 @@ static bool expectedSingularityFor(const SurfaceCase& s, double k) {
         case Behavior::RegularForNonzeroK: return std::fabs(k)<=eps;
         case Behavior::WhitneyUmbrella: return k>=-eps;
         case Behavior::PersistentOrigin: return true;
-        case Behavior::RegularControl: return false;
     }
     return false;
 }
@@ -854,7 +752,7 @@ static Options parseOptions(int argc, char** argv) {
             std::cout << "Usage: isosurface_singularity_diagnostics [--resolution N] [--out DIR] [--quick] [--skip-phase] [--skip-interpolation]\n"
                       << "       [--surface ID (repeatable)] [--k-values -0.1,0,0.1]\n"
                       << "       [--interpolation-surface ID (repeatable)] [--interpolation-magnitudes 0.1,0.01]\n"
-                      << "Default: 38 surfaces x 9 k values, plus grid-phase tests.\n"
+                      << "Default: 34 parameterized surfaces x 9 k values, plus grid-phase tests.\n"
                       << "--quick: reduced 12-surface / 3-k smoke suite. Custom --surface and --k-values restrict a run.\n";
             std::exit(0);
         } else {
@@ -867,7 +765,7 @@ static Options parseOptions(int argc, char** argv) {
 static bool quickSurface(const std::string& id) {
     static const std::set<std::string> ids={"plane_x3_ky","isolated_cusp_x","quartic_cusp_x","mixed_cubic",
         "level_shift_cone","whitney_umbrella","monkey_saddle","cubic_family","crossing_planes_xy",
-        "elliptic_cusp_x","sphere_control","torus_control"};
+        "higher_anisotropic_cusp","radial_quartic_x","triple_plane_unfolding"};
     return ids.count(id)>0;
 }
 static std::vector<double> kValues(const Options& options) {
@@ -1030,7 +928,7 @@ int main(int argc, char** argv) {
 
     if(options.runInterpolation) {
         const std::vector<std::string> defaultTargets = {"plane_x3_ky","mixed_cubic","whitney_umbrella","monkey_saddle",
-            "cubic_family","crossing_planes_xy","quadratic_crossing_unfolding","parabolic_cusp","elliptic_cusp_x"};
+            "cubic_family","crossing_planes_xy","quadratic_crossing_unfolding","parabolic_cusp","higher_anisotropic_cusp"};
         const std::vector<std::string> targets = !options.interpolationSurfaces.empty() ? options.interpolationSurfaces :
             (!options.surfaces.empty() ? options.surfaces :
              (options.quick ? std::vector<std::string>{"plane_x3_ky","mixed_cubic","whitney_umbrella","cubic_family"} : defaultTargets));
