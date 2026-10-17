@@ -28,6 +28,7 @@
 #pragma once
 #include "Expr.h"
 #include <vector>
+#include <cstddef>
 #include <array>
 #include <cstdint>
 #include <chrono>
@@ -44,10 +45,15 @@ struct GridSample {
     double gx, gy, gz; // analytic gradient, from Dual3
 };
 
+struct SkippedTriangleGeometry {
+    float ax, ay, az, bx, by, bz, cx, cy, cz;
+};
 struct IsosurfaceResult {
     std::vector<SurfaceVertex> vertices; // non-indexed triangle soup, 3 per tri
     double buildMillis = 0.0;
     double maxGradMag = 1e-9; // for color normalization
+    std::size_t skippedDegenerateTriangles = 0; // triangles dropped by the degenerate-area guard
+    std::vector<SkippedTriangleGeometry> skippedDegenerateGeometry; // positions of dropped triangle candidates
 };
 
 // Cube corner numbering/positions (standard Marching Cubes convention,
@@ -411,20 +417,29 @@ public:
         // any triangle whose area comes out at ~0 right before emitting it.
         const float degenerateAreaEps = (float)(step * step) * 1e-8f;
         auto emitTri = [&](const SurfaceVertex& a, const SurfaceVertex& b, const SurfaceVertex& c) {
-            // Orient winding so the face normal agrees with the (averaged)
-            // analytic gradient direction (F increases from inside to outside).
-            float ex1 = b.px - a.px, ey1 = b.py - a.py, ez1 = b.pz - a.pz;
-            float ex2 = c.px - a.px, ey2 = c.py - a.py, ez2 = c.pz - a.pz;
-            float fnx = ey1*ez2 - ez1*ey2;
-            float fny = ez1*ex2 - ex1*ez2;
-            float fnz = ex1*ey2 - ey1*ex2;
-            float crossLenSq = fnx*fnx + fny*fny + fnz*fnz;
-            if (crossLenSq < degenerateAreaEps * degenerateAreaEps) return; // zero-area sliver, skip
-            float gnx = a.nx+b.nx+c.nx, gny = a.ny+b.ny+c.ny, gnz = a.nz+b.nz+c.nz;
-            float dot = fnx*gnx + fny*gny + fnz*gnz;
-            float gm = std::max({a.gradMag, b.gradMag, c.gradMag});
-            result.maxGradMag = std::max(result.maxGradMag, (double)gm);
-            if (dot < 0) {
+            // Orient each face to agree with the analytic gradient. Capture
+            // degenerate candidate geometry before skipping it, for diagnostics.
+            const float ex1 = b.px - a.px, ey1 = b.py - a.py, ez1 = b.pz - a.pz;
+            const float ex2 = c.px - a.px, ey2 = c.py - a.py, ez2 = c.pz - a.pz;
+            const float fnx = ey1 * ez2 - ez1 * ey2;
+            const float fny = ez1 * ex2 - ex1 * ez2;
+            const float fnz = ex1 * ey2 - ey1 * ex2;
+            const float crossLenSq = fnx * fnx + fny * fny + fnz * fnz;
+            if (crossLenSq < degenerateAreaEps * degenerateAreaEps) {
+                ++result.skippedDegenerateTriangles;
+                result.skippedDegenerateGeometry.push_back({
+                    a.px, a.py, a.pz, b.px, b.py, b.pz, c.px, c.py, c.pz
+                });
+                return; // zero-area sliver, skipped and recorded
+            }
+
+            const float gnx = a.nx + b.nx + c.nx;
+            const float gny = a.ny + b.ny + c.ny;
+            const float gnz = a.nz + b.nz + c.nz;
+            const float dot = fnx * gnx + fny * gny + fnz * gnz;
+            const float gm = std::max({a.gradMag, b.gradMag, c.gradMag});
+            result.maxGradMag = std::max(result.maxGradMag, static_cast<double>(gm));
+            if (dot < 0.0f) {
                 result.vertices.push_back(a);
                 result.vertices.push_back(c);
                 result.vertices.push_back(b);
@@ -434,7 +449,6 @@ public:
                 result.vertices.push_back(c);
             }
         };
-
         for (int i = 0; i < res; i++) {
             for (int j = 0; j < res; j++) {
                 for (int kk = 0; kk < res; kk++) {

@@ -50,3 +50,17 @@ target_link_libraries(isosurface_lab PRIVATE pmp pmp_vis Threads::Threads)
 add_executable(isosurface_lab_tests tests/test_isosurface.cpp)
 target_include_directories(isosurface_lab_tests PRIVATE src)
 add_test(NAME isosurface_correctness COMMAND isosurface_lab_tests)
+
+# Expanded, headless singularity/grid-phase diagnostics.
+add_executable(isosurface_singularity_diagnostics tests/test_singularity_diagnostics.cpp)
+target_include_directories(isosurface_singularity_diagnostics PRIVATE src)
+add_test(NAME singularity_diagnostics_smoke
+    COMMAND isosurface_singularity_diagnostics --quick --resolution 20 --out ${CMAKE_BINARY_DIR}/singularity_diagnostics_smoke_artifacts)
+
+# Sweep every built-in surface through the selected k values and report
+# nearby gradients, topology diagnostics, and winning +/- k candidates.
+add_executable(isosurface_singularity_sweep_tests tests/test_singularity_sweep.cpp)
+target_include_directories(isosurface_singularity_sweep_tests PRIVATE src)
+add_test(NAME singularity_k_sweep COMMAND isosurface_singularity_sweep_tests)
+set_tests_properties(singularity_k_sweep PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
