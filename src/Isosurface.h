@@ -32,6 +32,8 @@
 #include <array>
 #include <cstdint>
 #include <chrono>
+#include <cmath>
+#include <limits>
 #include <algorithm>
 #include <cmath>
 #include <utility>
@@ -54,7 +56,8 @@ struct IsosurfaceResult {
     std::vector<SurfaceVertex> vertices; // non-indexed triangle soup, 3 per tri
     double buildMillis = 0.0;
     double maxGradMag = 1e-9; // for color normalization
-    std::size_t skippedDegenerateTriangles = 0; // triangles dropped by the degenerate-area guard
+    std::size_t skippedDegenerateTriangles = 0;
+    std::size_t exactZeroGridSamples = 0; // grid samples exactly on F=0 before tie-breaking // triangles dropped by the degenerate-area guard
     std::vector<SkippedTriangleGeometry> skippedDegenerateGeometry; // positions of dropped triangle candidates
 };
 
@@ -375,51 +378,59 @@ public:
             }
         }
 
-        // Exact-zero grid-sample tie-break (deterministic, local-scale).
-        // Marching Cubes classifies corners with f < 0, so f == 0 is already
-        // classified as outside. However, leaving f exactly zero means several
-        // incident cube edges can interpolate to the same grid vertex. The
-        // resulting duplicate triangle vertices are later discarded by the
-        // degenerate-area guard, which can leave holes in an otherwise closed
-        // surface (notably the radius-0.5 sphere at resolution 48).
+        // Deterministic exact-zero tie-break for Marching Cubes.
         //
-        // Replace only exact zeros with a small positive tie-break value. This
-        // preserves each corner's inside/outside classification while moving
-        // crossings on incident edges a tiny, locally scaled fraction into the
-        // edge. Updates are collected first so each scale uses the ORIGINAL
-        // scalar samples, independent of iteration order. This is a numerical
-        // tie-break for grid-aligned zeros, not a change to the analytic field.
-        constexpr double zeroTieFraction = 1e-3;
-        std::vector<std::pair<std::size_t, double>> exactZeroUpdates;
+        // The grid spans [-h,h]^3; when a grid vertex lies exactly on F=0,
+        // several incident edges can report the same crossing point. The
+        // classic lookup table can then emit zero-area triangles. We count
+        // those samples BEFORE changing the sampled value, and apply one
+        // deterministic positive bias to each exact-zero sample. The bias is
+        // 5% of the smallest finite, nonzero face-neighbour magnitude, so it
+        // remains below every nonzero face-neighbour magnitude. This is a
+        // local grid tie-break (at most a small fraction of a cell), not a
+        // claim that the analytic field itself has changed. Gradients/normals
+        // are still evaluated from the original expression at emitted points.
+        std::vector<double> originalF(grid.size());
+        std::vector<double> adjustedF(grid.size());
+        double maxAbsGridF = 0.0;
+        for (std::size_t n = 0; n < grid.size(); ++n) {
+            originalF[n] = grid[n].f;
+            adjustedF[n] = grid[n].f;
+            maxAbsGridF = std::max(maxAbsGridF, std::fabs(grid[n].f));
+        }
+        constexpr double kExactZeroBiasFraction = 5e-2;
+        const int neighborOffset[6][3] = {
+            {-1, 0, 0}, {1, 0, 0}, {0, -1, 0},
+            {0, 1, 0}, {0, 0, -1}, {0, 0, 1}
+        };
         for (int i = 0; i < N; ++i) {
             for (int j = 0; j < N; ++j) {
                 for (int kk = 0; kk < N; ++kk) {
-                    const std::size_t sampleIndex = idx(i, j, kk);
-                    if (grid[sampleIndex].f != 0.0) continue;
-
-                    double localScale = 0.0;
-                    auto includeNeighborMagnitude = [&](int ni, int nj, int nk) {
-                        localScale = std::max(
-                            localScale,
-                            std::fabs(grid[idx(ni, nj, nk)].f));
-                    };
-                    if (i > 0)  includeNeighborMagnitude(i - 1, j, kk);
-                    if (i < res) includeNeighborMagnitude(i + 1, j, kk);
-                    if (j > 0)  includeNeighborMagnitude(i, j - 1, kk);
-                    if (j < res) includeNeighborMagnitude(i, j + 1, kk);
-                    if (kk > 0) includeNeighborMagnitude(i, j, kk - 1);
-                    if (kk < res) includeNeighborMagnitude(i, j, kk + 1);
-
+                    const std::size_t gid = idx(i, j, kk);
+                    if (originalF[gid] != 0.0) continue;
+                    ++result.exactZeroGridSamples;
+                    double localScale = std::numeric_limits<double>::infinity();
+                    for (const auto& offset : neighborOffset) {
+                        const int ni = i + offset[0];
+                        const int nj = j + offset[1];
+                        const int nk = kk + offset[2];
+                        if (ni < 0 || nj < 0 || nk < 0 || ni >= N || nj >= N || nk >= N)
+                            continue;
+                        const double neighborF = originalF[idx(ni, nj, nk)];
+                        if (neighborF != 0.0 && std::isfinite(neighborF))
+                            localScale = std::min(localScale, std::fabs(neighborF));
+                    }
+                    if (!std::isfinite(localScale)) localScale = maxAbsGridF;
                     if (localScale > 0.0 && std::isfinite(localScale)) {
-                        exactZeroUpdates.emplace_back(
-                            sampleIndex, zeroTieFraction * localScale);
+                        double bias = localScale * kExactZeroBiasFraction;
+                        if (!(bias > 0.0)) bias = std::nextafter(0.0, 1.0);
+                        adjustedF[gid] = bias; // deterministic outside tie-break
                     }
                 }
             }
         }
-        for (const auto& update : exactZeroUpdates) {
-            grid[update.first].f = update.second;
-        }
+        for (std::size_t n = 0; n < grid.size(); ++n)
+            grid[n].f = adjustedF[n];
 
         auto worldPos = [&](int i, int j, int kk) {
             return std::array<double,3>{ -h + i * step, -h + j * step, -h + kk * step };

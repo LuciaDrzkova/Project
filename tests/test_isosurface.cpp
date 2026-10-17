@@ -102,6 +102,32 @@ int main() {
 
     }
 
+    // --- Exact-zero grid-alignment regression (sphere radius 0.5) ---
+    // At resolution 48 over [-1,1], the grid contains exact samples on this
+    // sphere. This explicitly exercises the exact-zero tie-break, rather than
+    // relying only on a sphere whose radius misses the grid points.
+    {
+        auto exactZeroAst = parseExpression("x*x + y*y + z*z - 0.25");
+        auto exactZeroRes = Isosurface::build(exactZeroAst.get(), 0.0, 48, 1.0);
+        const auto exactZeroTopo = analyzeTopology(exactZeroRes.vertices);
+        std::printf(
+            "[exact-zero sphere] exactZeroSamples=%zu skippedDegenerate=%zu "
+            "V=%zu E=%zu F=%zu boundaryEdges=%d badEdges=%d chi=%ld\n",
+            exactZeroRes.exactZeroGridSamples,
+            exactZeroRes.skippedDegenerateTriangles,
+            exactZeroTopo.numUniqueVertices, exactZeroTopo.numUniqueEdges,
+            exactZeroTopo.numTriangles, exactZeroTopo.boundaryEdges,
+            exactZeroTopo.badEdges, exactZeroTopo.eulerCharacteristic());
+        CHECK(exactZeroRes.exactZeroGridSamples > 0,
+              "exact-zero sphere regression did not hit any exact-zero grid samples");
+        CHECK(exactZeroRes.skippedDegenerateTriangles == 0,
+              "exact-zero sphere still emitted skipped degenerate triangles");
+        CHECK(exactZeroTopo.boundaryEdges == 0 && exactZeroTopo.badEdges == 0,
+              "exact-zero sphere mesh is not a closed manifold");
+        CHECK(exactZeroTopo.eulerCharacteristic() == 2,
+              "exact-zero sphere Euler characteristic should be 2 (genus 0)");
+    }
+
     // --- Test 2: torus (R=0.35 tube radius r=0.15), a genus-1 surface. ---
     // This exercises a much richer set of the 256 marching-cubes cases
     // than a sphere does (saddle regions on the inner/outer equator), so

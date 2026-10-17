@@ -68,3 +68,15 @@ target_include_directories(isosurface_singularity_sweep_tests PRIVATE src)
 add_test(NAME singularity_k_sweep COMMAND isosurface_singularity_sweep_tests)
 set_tests_properties(singularity_k_sweep PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# Additive mesh-to-mesh interpolation experiment; this target does not alter the viewer.
+add_executable(isosurface_mesh_interpolation_tests tests/test_mesh_to_mesh_interpolation.cpp)
+target_include_directories(isosurface_mesh_interpolation_tests PRIVATE src)
+
+add_test(
+    NAME mesh_to_mesh_interpolation_smoke
+    COMMAND $<TARGET_FILE:isosurface_mesh_interpolation_tests>
+            --resolution 20
+            --k-values 0.01,0.001
+            --surfaces plane_x3_ky,mixed_cubic,crossing_planes_xy
+            --out ${CMAKE_BINARY_DIR}/mesh_to_mesh_interpolation_smoke_artifacts
+)

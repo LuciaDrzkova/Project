@@ -20,6 +20,9 @@ cmake_install.cmake
 /diagnostics_mixed_cubic/
 /diagnostics_*/
 singularity_results/quick/diagnostic_meshes/
+mesh_to_mesh_interpolation_results/res_24
+mesh_to_mesh_interpolation_results/res_32
+mesh_to_mesh_interpolation_results/res_48
 
 # One-time diagnostic installer package
 /singularity_diagnostics_update/
