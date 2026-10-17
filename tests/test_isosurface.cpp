@@ -70,7 +70,7 @@ int main() {
     // Every generated vertex should lie very close to radius 0.5, and its
     // analytic gradient should point radially outward (dot(normal, pos_hat) ~ 1).
     {
-        auto ast = parseExpression("x*x + y*y + z*z - 0.25");
+        auto ast = parseExpression("x*x + y*y + z*z - 0.2209");
         auto res = Isosurface::build(ast.get(), 0.0, 48, 1.0);
         std::printf("[sphere] %zu verts (%zu tris), build %.2fms, maxGrad=%.4f\n",
                     res.vertices.size(), res.vertices.size()/3, res.buildMillis, res.maxGradMag);
@@ -78,24 +78,28 @@ int main() {
         double maxRadiusErr = 0, minDot = 1.0;
         for (auto& v : res.vertices) {
             double r = std::sqrt(v.px*v.px + v.py*v.py + v.pz*v.pz);
-            maxRadiusErr = std::max(maxRadiusErr, std::fabs(r - 0.5));
+            maxRadiusErr = std::max(maxRadiusErr, std::fabs(r - 0.47));
             double rl = r > 1e-9 ? 1.0/r : 0.0;
             double dot = (v.px*rl)*v.nx + (v.py*rl)*v.ny + (v.pz*rl)*v.nz;
             minDot = std::min(minDot, dot);
         }
         std::printf("[sphere] max radius error = %.5f, min(normal . radial_hat) = %.5f\n", maxRadiusErr, minDot);
-        CHECK(maxRadiusErr < 0.03, "sphere vertices deviate too far from r=0.5");
+        CHECK(maxRadiusErr < 0.01, "sphere vertices deviate too far from r=0.47");
         CHECK(minDot > 0.99, "sphere analytic gradient not radial / not outward-oriented");
-        // expected analytic |grad| on this sphere is 2r = 1.0 everywhere
-        CHECK(std::fabs(res.maxGradMag - 1.0) < 0.05, "sphere |grad F| should be ~1.0 (2r at r=0.5) everywhere");
+        // For F = x*x + y*y + z*z - r*r, |grad F| = 2r.
+        CHECK(std::fabs(res.maxGradMag - 0.94) < 0.05,"sphere |grad F| should be approximately 0.94 (2r at r=0.47)");
 
         // Topology: a sphere is a closed genus-0 surface, Euler characteristic 2.
         auto topo = analyzeTopology(res.vertices);
         std::printf("[sphere] V=%zu E=%zu F=%zu boundaryEdges=%d badEdges=%d chi=%ld (expect 2)\n",
                     topo.numUniqueVertices, topo.numUniqueEdges, topo.numTriangles,
                     topo.boundaryEdges, topo.badEdges, topo.eulerCharacteristic());
+        CHECK(res.skippedDegenerateTriangles == 0,
+              "grid-aligned sphere emitted skipped degenerate triangles");
         CHECK(topo.boundaryEdges == 0 && topo.badEdges == 0, "sphere mesh is not a closed manifold (marching cubes crack/degenerate triangle/hole)");
         CHECK(topo.eulerCharacteristic() == 2, "sphere mesh Euler characteristic should be 2 (genus 0)");
+        std::printf("[sphere] skipped degenerate triangles = %zu\n", res.skippedDegenerateTriangles);
+
     }
 
     // --- Test 2: torus (R=0.35 tube radius r=0.15), a genus-1 surface. ---

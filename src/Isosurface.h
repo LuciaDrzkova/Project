@@ -33,6 +33,8 @@
 #include <cstdint>
 #include <chrono>
 #include <algorithm>
+#include <cmath>
+#include <utility>
 
 struct SurfaceVertex {
     float px, py, pz;      // position
@@ -371,6 +373,52 @@ public:
                     s.f = r.v; s.gx = r.dx; s.gy = r.dy; s.gz = r.dz;
                 }
             }
+        }
+
+        // Exact-zero grid-sample tie-break (deterministic, local-scale).
+        // Marching Cubes classifies corners with f < 0, so f == 0 is already
+        // classified as outside. However, leaving f exactly zero means several
+        // incident cube edges can interpolate to the same grid vertex. The
+        // resulting duplicate triangle vertices are later discarded by the
+        // degenerate-area guard, which can leave holes in an otherwise closed
+        // surface (notably the radius-0.5 sphere at resolution 48).
+        //
+        // Replace only exact zeros with a small positive tie-break value. This
+        // preserves each corner's inside/outside classification while moving
+        // crossings on incident edges a tiny, locally scaled fraction into the
+        // edge. Updates are collected first so each scale uses the ORIGINAL
+        // scalar samples, independent of iteration order. This is a numerical
+        // tie-break for grid-aligned zeros, not a change to the analytic field.
+        constexpr double zeroTieFraction = 1e-3;
+        std::vector<std::pair<std::size_t, double>> exactZeroUpdates;
+        for (int i = 0; i < N; ++i) {
+            for (int j = 0; j < N; ++j) {
+                for (int kk = 0; kk < N; ++kk) {
+                    const std::size_t sampleIndex = idx(i, j, kk);
+                    if (grid[sampleIndex].f != 0.0) continue;
+
+                    double localScale = 0.0;
+                    auto includeNeighborMagnitude = [&](int ni, int nj, int nk) {
+                        localScale = std::max(
+                            localScale,
+                            std::fabs(grid[idx(ni, nj, nk)].f));
+                    };
+                    if (i > 0)  includeNeighborMagnitude(i - 1, j, kk);
+                    if (i < res) includeNeighborMagnitude(i + 1, j, kk);
+                    if (j > 0)  includeNeighborMagnitude(i, j - 1, kk);
+                    if (j < res) includeNeighborMagnitude(i, j + 1, kk);
+                    if (kk > 0) includeNeighborMagnitude(i, j, kk - 1);
+                    if (kk < res) includeNeighborMagnitude(i, j, kk + 1);
+
+                    if (localScale > 0.0 && std::isfinite(localScale)) {
+                        exactZeroUpdates.emplace_back(
+                            sampleIndex, zeroTieFraction * localScale);
+                    }
+                }
+            }
+        }
+        for (const auto& update : exactZeroUpdates) {
+            grid[update.first].f = update.second;
         }
 
         auto worldPos = [&](int i, int j, int kk) {

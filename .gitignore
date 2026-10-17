@@ -19,6 +19,7 @@ cmake_install.cmake
 /singularity_sweep_artifacts/
 /diagnostics_mixed_cubic/
 /diagnostics_*/
+singularity_results/quick/diagnostic_meshes/
 
 # One-time diagnostic installer package
 /singularity_diagnostics_update/
