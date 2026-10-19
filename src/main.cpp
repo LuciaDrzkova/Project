@@ -25,6 +25,8 @@
 #include <iostream>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
+#include <cctype>
 #include <cstring>
 #include <limits>
 #include <map>
@@ -146,7 +148,7 @@ protected:
             ImGui::Separator();
             bool k_changed = false;
             ImGui::SetNextItemWidth(110.0f);
-            k_changed |= ImGui::InputFloat("k value", &k_, 0.01f, 0.1f, "%.4f");
+            k_changed |= draw_k_text_editor("k value", main_k_text_buffer_, main_k_text_editing_, "Apply k##main", main_k_text_error_);
             // Keep this main-panel slider compact. A width of -1.0f fills
             // the entire available panel width, which is too wide here.
             ImGui::SetNextItemWidth(210.0f);
@@ -1252,6 +1254,66 @@ private:
             std::string(slice_output_directory_.data()) + "'.";
     }
 
+    std::array<char, 64> main_k_text_buffer_{};
+    bool main_k_text_editing_ = false;
+    std::string main_k_text_error_;
+    std::array<char, 64> gallery_k_text_buffer_{};
+    bool gallery_k_text_editing_ = false;
+    std::string gallery_k_text_error_;
+
+    bool draw_k_text_editor(const char* label,
+                            std::array<char, 64>& buffer,
+                            bool& editing,
+                            const char* apply_button_label,
+                            std::string& error_message)
+    {
+        // Do not reformat the text while the user is actively editing it.
+        if (!editing)
+            std::snprintf(buffer.data(), buffer.size(), "%.9g", static_cast<double>(k_));
+
+        ImGui::SetNextItemWidth(130.0f);
+        const bool enter_submitted = ImGui::InputText(
+            label, buffer.data(), buffer.size(),
+            ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific);
+        const bool field_active = ImGui::IsItemActive();
+        const bool deactivated_after_edit = ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::SameLine();
+        const bool apply_clicked = ImGui::Button(apply_button_label);
+        editing = field_active;
+
+        if (enter_submitted || deactivated_after_edit || apply_clicked)
+        {
+            char* end = nullptr;
+            const double parsed = std::strtod(buffer.data(), &end);
+            while (end != nullptr && *end != '\0' && std::isspace(static_cast<unsigned char>(*end)))
+                ++end;
+            const bool valid = end != buffer.data() && end != nullptr && *end == '\0' &&
+                std::isfinite(parsed) &&
+                parsed <= static_cast<double>(std::numeric_limits<float>::max()) &&
+                parsed >= -static_cast<double>(std::numeric_limits<float>::max());
+
+            if (!valid)
+            {
+                error_message = "Invalid k. Enter a finite number, e.g. -0.001 or 1e-4.";
+                std::snprintf(buffer.data(), buffer.size(), "%.9g", static_cast<double>(k_));
+                editing = false;
+                return false;
+            }
+
+            const float new_k = static_cast<float>(parsed);
+            const bool changed = new_k != k_;
+            k_ = new_k;
+            std::snprintf(buffer.data(), buffer.size(), "%.9g", static_cast<double>(k_));
+            editing = false;
+            error_message.clear();
+            return changed;
+        }
+
+        if (!error_message.empty())
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s", error_message.c_str());
+        return false;
+    }
+
     void draw_slice_gallery()
     {
         if (!show_slice_gallery_ || !slice_result_available_ ||
@@ -1279,11 +1341,12 @@ private:
         ImGui::TextDisabled("Cuts are exactly on grid coordinates -L + i*h (including both domain ends), not at cell centers.");
         ImGui::Separator();
         ImGui::SetNextItemWidth(170.0f);
-        if (ImGui::InputFloat("Viewer k", &k_, 0.001f, 0.01f, "%.9g"))
+        if (draw_k_text_editor("Viewer k", gallery_k_text_buffer_, gallery_k_text_editing_, "Apply k##gallery", gallery_k_text_error_))
         {
             sanitize_parameters();
             mesh_dirty_ = true;
             sweep_dirty_ = true;
+            invalidate_slice_overlay();
             if (slice_result_available_) slice_data_stale_ = true;
         }
         ImGui::SameLine();
