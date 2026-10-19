@@ -24,6 +24,8 @@ mesh_to_mesh_interpolation_results/res_24
 mesh_to_mesh_interpolation_results/res_32
 mesh_to_mesh_interpolation_results/res_48
 
+isosurface_slices
+
 # One-time diagnostic installer package
 /singularity_diagnostics_update/
 

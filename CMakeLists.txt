@@ -80,3 +80,12 @@ add_test(
             --surfaces plane_x3_ky,mixed_cubic,crossing_planes_xy
             --out ${CMAKE_BINARY_DIR}/mesh_to_mesh_interpolation_smoke_artifacts
 )
+
+# Grid-aligned 2D cross-section extraction regression test.
+add_executable(isosurface_slice_extraction_tests tests/test_isosurface_slices.cpp)
+target_include_directories(isosurface_slice_extraction_tests PRIVATE src)
+add_test(
+  NAME isosurface_2d_slice_extraction
+  COMMAND isosurface_slice_extraction_tests
+          --out ${CMAKE_BINARY_DIR}/isosurface_2d_slice_smoke_artifacts
+)

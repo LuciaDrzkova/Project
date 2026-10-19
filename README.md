@@ -130,3 +130,15 @@ src/Camera.h        minimal orbit camera (no GLU dependency)
 src/main.cpp        GLFW + Dear ImGui application, rendering & UI
 tests/test_isosurface.cpp   standalone correctness tests (no GL deps)
 ```
+
+# 1. Basic correctness
+ctest --test-dir build --output-on-failure \
+  -R '^isosurface_correctness$'
+
+# 2. Quick singularity diagnostics
+ctest --test-dir build --output-on-failure \
+  -R '^singularity_diagnostics_smoke$'
+
+# 3. Earlier k sweep
+ctest --test-dir build --output-on-failure \
+  -R '^singularity_k_sweep$'
