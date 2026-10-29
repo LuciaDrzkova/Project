@@ -61,12 +61,30 @@ add_test(
             --out ${CMAKE_BINARY_DIR}/singularity_diagnostics_smoke_artifacts
 )
 
+add_executable(isosurface_unfolding_criterion_tests tests/test_unfolding_criterion.cpp)
+target_include_directories(isosurface_unfolding_criterion_tests PRIVATE src)
+add_test(NAME unfolding_criterion COMMAND isosurface_unfolding_criterion_tests)
+
 # Sweep every built-in surface through the selected k values and report
 # nearby gradients, topology diagnostics, and winning +/- k candidates.
 add_executable(isosurface_singularity_sweep_tests tests/test_singularity_sweep.cpp)
 target_include_directories(isosurface_singularity_sweep_tests PRIVATE src)
 add_test(NAME singularity_k_sweep COMMAND isosurface_singularity_sweep_tests)
 set_tests_properties(singularity_k_sweep PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(
+    isosurface_deformation_criteria_tests
+    tests/test_deformation_criteria.cpp
+)
+
+target_include_directories(
+    isosurface_deformation_criteria_tests
+    PRIVATE src
+)
+
+add_test(
+    NAME deformation_criteria
+    COMMAND isosurface_deformation_criteria_tests)
 
 # Additive mesh-to-mesh interpolation experiment; this target does not alter the viewer.
 add_executable(isosurface_mesh_interpolation_tests tests/test_mesh_to_mesh_interpolation.cpp)
