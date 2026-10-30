@@ -40,8 +40,6 @@ if(TARGET imgui)
 endif()
 
 find_package(Threads REQUIRED)
-
-# Keep the same executable name used by the original Project repository.
 add_executable(isosurface_lab src/main.cpp)
 target_include_directories(isosurface_lab PRIVATE src)
 target_link_libraries(isosurface_lab PRIVATE pmp pmp_vis Threads::Threads)
@@ -55,48 +53,28 @@ add_test(NAME isosurface_correctness COMMAND isosurface_lab_tests)
 add_executable(isosurface_singularity_diagnostics tests/test_singularity_diagnostics.cpp)
 target_include_directories(isosurface_singularity_diagnostics PRIVATE src)
 add_test(
-    NAME singularity_diagnostics_smoke
-    COMMAND isosurface_singularity_diagnostics
-            --quick --resolution 20
-            --out ${CMAKE_BINARY_DIR}/singularity_diagnostics_smoke_artifacts
+  NAME singularity_diagnostics_smoke
+  COMMAND isosurface_singularity_diagnostics
+          --quick --resolution 20
+          --out ${CMAKE_BINARY_DIR}/singularity_diagnostics_smoke_artifacts
 )
 
-add_executable(isosurface_unfolding_criterion_tests tests/test_unfolding_criterion.cpp)
-target_include_directories(isosurface_unfolding_criterion_tests PRIVATE src)
-add_test(NAME unfolding_criterion COMMAND isosurface_unfolding_criterion_tests)
-
-# Sweep every built-in surface through the selected k values and report
-# nearby gradients, topology diagnostics, and winning +/- k candidates.
+# Sweep every built-in surface through selected k values.
 add_executable(isosurface_singularity_sweep_tests tests/test_singularity_sweep.cpp)
 target_include_directories(isosurface_singularity_sweep_tests PRIVATE src)
 add_test(NAME singularity_k_sweep COMMAND isosurface_singularity_sweep_tests)
 set_tests_properties(singularity_k_sweep PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
-add_executable(
-    isosurface_deformation_criteria_tests
-    tests/test_deformation_criteria.cpp
-)
-
-target_include_directories(
-    isosurface_deformation_criteria_tests
-    PRIVATE src
-)
-
-add_test(
-    NAME deformation_criteria
-    COMMAND isosurface_deformation_criteria_tests)
-
-# Additive mesh-to-mesh interpolation experiment; this target does not alter the viewer.
+# Additive mesh-to-mesh interpolation experiment.
 add_executable(isosurface_mesh_interpolation_tests tests/test_mesh_to_mesh_interpolation.cpp)
 target_include_directories(isosurface_mesh_interpolation_tests PRIVATE src)
-
 add_test(
-    NAME mesh_to_mesh_interpolation_smoke
-    COMMAND $<TARGET_FILE:isosurface_mesh_interpolation_tests>
-            --resolution 20
-            --k-values 0.01,0.001
-            --surfaces plane_x3_ky,mixed_cubic,crossing_planes_xy
-            --out ${CMAKE_BINARY_DIR}/mesh_to_mesh_interpolation_smoke_artifacts
+  NAME mesh_to_mesh_interpolation_smoke
+  COMMAND $<TARGET_FILE:isosurface_mesh_interpolation_tests>
+          --resolution 20
+          --k-values 0.01,0.001
+          --surfaces plane_x3_ky,mixed_cubic,crossing_planes_xy
+          --out ${CMAKE_BINARY_DIR}/mesh_to_mesh_interpolation_smoke_artifacts
 )
 
 # Grid-aligned 2D cross-section extraction regression test.
@@ -107,3 +85,8 @@ add_test(
   COMMAND isosurface_slice_extraction_tests
           --out ${CMAKE_BINARY_DIR}/isosurface_2d_slice_smoke_artifacts
 )
+
+# New k -> 0 geometric/gradient convergence experiment, independent of the GUI.
+add_executable(isosurface_singularity_convergence_tests tests/test_singularity_convergence.cpp)
+target_include_directories(isosurface_singularity_convergence_tests PRIVATE src)
+add_test(NAME singularity_convergence_regression COMMAND isosurface_singularity_convergence_tests)

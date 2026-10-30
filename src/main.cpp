@@ -9,6 +9,7 @@
 #include "Isosurface.h"
 #include "SurfaceCatalogue.h"
 #include "IsosurfaceSlices.h"
+#include "SingularityConvergence.h"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -378,8 +379,28 @@ protected:
                 ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "Parse error: %s", parse_error_.c_str());
 
             ImGui::Separator();
+            // BEGIN THESIS CONVERGENCE ANALYSIS UI
             const float max_grad = array_max(sweep_.grad_magnitude, 1e-5f);
             ImGui::Text("|grad F(P,k)| over k in [-1,1]");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Analyze surface convergence"))
+                run_singularity_convergence();
+
+            // Select the actual k samples for the geometric convergence experiment.
+            ImGui::SetNextItemWidth(92.0f);
+            ImGui::InputDouble("k minimum", &convergence_k_min_, 0.0, 0.0, "%.8g");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(92.0f);
+            ImGui::InputDouble("k maximum", &convergence_k_max_, 0.0, 0.0, "%.8g");
+            ImGui::SetNextItemWidth(145.0f);
+            ImGui::InputInt("Number of k samples", &convergence_sample_count_);
+            convergence_sample_count_ = std::clamp(convergence_sample_count_, 3, 101);
+            ImGui::TextDisabled("Uniformly spaced; endpoints included. Max 101 samples.");
+            ImGui::SetNextItemWidth(210.0f);
+            ImGui::SliderInt("Convergence mesh resolution", &convergence_resolution_, 16, 110);
+            draw_singularity_convergence_report();
+            // END THESIS CONVERGENCE ANALYSIS UI
+
             plot_with_cursor("##gradmag", sweep_.grad_magnitude.data(), KSweep::N, k_, 0.0f, max_grad * 1.05f, 75.0f);
             if (ImGui::CollapsingHeader("Gradient components and F(P,k)", false))
             {
@@ -659,6 +680,15 @@ private:
 
     IsosurfaceResult last_surface_result_;
     KSweep sweep_;
+    // BEGIN THESIS CONVERGENCE ANALYSIS MEMBERS
+    double convergence_k_min_ = -0.1;
+    double convergence_k_max_ = 0.1;
+    int convergence_sample_count_ = 25;
+    int convergence_resolution_ = 48;
+    bool convergence_analysis_available_ = false;
+    iso_convergence::Analysis convergence_analysis_{};
+    std::string convergence_message_;
+    // END THESIS CONVERGENCE ANALYSIS MEMBERS
 
     pmp::Shader overlay_shader_;
     // Many Core Profile drivers (not just macOS: this also reproduces on
@@ -1099,6 +1129,95 @@ private:
         }
     }
 
+    // BEGIN THESIS CONVERGENCE ANALYSIS METHODS
+    void run_singularity_convergence()
+    {
+        try
+        {
+            iso_convergence::Options options;
+            options.probe = {static_cast<double>(point_of_interest_[0]),
+                             static_cast<double>(point_of_interest_[1]),
+                             static_cast<double>(point_of_interest_[2])};
+            options.resolution = std::clamp(convergence_resolution_, 16, 110);
+            options.halfExtent = static_cast<double>(half_extent_);
+            options.localRadius = 0.45 * options.halfExtent;
+            options.kValues = iso_convergence::makeLinearKValues(
+                convergence_k_min_, convergence_k_max_, convergence_sample_count_);
+
+            options.familyExpression = last_good_expression_;
+            convergence_analysis_ = iso_convergence::analyze(ast_.get(), options);
+            convergence_analysis_available_ = true;
+
+            std::string write_error;
+            if (iso_convergence::writeCsv("singularity_convergence.csv",
+                                          convergence_analysis_, &write_error))
+                convergence_message_ = "Saved singularity_convergence.csv. Numerical diagnostics only, not a proof.";
+            else
+                convergence_message_ = write_error;
+        }
+        catch (const std::exception& error)
+        {
+            convergence_analysis_available_ = false;
+            convergence_message_ = std::string("Convergence analysis failed: ") + error.what();
+        }
+    }
+
+    void draw_singularity_convergence_report()
+    {
+        if (!convergence_analysis_available_)
+        {
+            if (!convergence_message_.empty())
+                ImGui::TextWrapped("%s", convergence_message_.c_str());
+            return;
+        }
+
+        const auto& a = convergence_analysis_;
+        ImGui::Text("Samples: %zu; range [% .6g, % .6g]; grid spacing %.5g",
+                    a.samples.size(), convergence_k_min_, convergence_k_max_, a.gridSpacing);
+        ImGui::TextWrapped("At P, k=0: F=% .4g and |grad F|=% .4g. These should be near zero if P is the singular point being investigated; this check does not prove isolation.",
+                           a.probeAtZero.value, a.probeAtZero.gradientNorm);
+        ImGui::TextWrapped("k < 0: point-distance trend: %s (log-log slope %s). Local mesh-distance trend: %s.",
+                           a.negativeSide.pointDistance.classification.c_str(),
+                           iso_convergence::formatNumber(a.negativeSide.pointDistance.logLogSlope).c_str(),
+                           a.negativeSide.localHausdorff.classification.c_str());
+        ImGui::TextWrapped("k > 0: point-distance trend: %s (log-log slope %s). Local mesh-distance trend: %s.",
+                           a.positiveSide.pointDistance.classification.c_str(),
+                           iso_convergence::formatNumber(a.positiveSide.pointDistance.logLogSlope).c_str(),
+                           a.positiveSide.localHausdorff.classification.c_str());
+        ImGui::TextDisabled("Trend labels are heuristics over the selected range. Increase mesh resolution and inspect the CSV before interpreting them.");
+
+        if (ImGui::CollapsingHeader("Convergence sample results", false))
+        {
+            if (ImGui::BeginTable("ConvergenceResults", 7,
+                                  ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                                  ImGuiTableFlags_SizingStretchProp))
+            {
+                ImGui::TableSetupColumn("k");
+                ImGui::TableSetupColumn("Vertices");
+                ImGui::TableSetupColumn("Local vertices");
+                ImGui::TableSetupColumn("d(P, mesh)");
+                ImGui::TableSetupColumn("min |grad F|");
+                ImGui::TableSetupColumn("max |F| local");
+                ImGui::TableSetupColumn("local d_H proxy");
+                ImGui::TableHeadersRow();
+                for (const auto& sample : a.samples)
+                {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn(); ImGui::Text("% .6g", sample.k);
+                    ImGui::TableNextColumn(); ImGui::Text("%zu", sample.totalVertices);
+                    ImGui::TableNextColumn(); ImGui::Text("%zu", sample.localVertices);
+                    ImGui::TableNextColumn(); ImGui::Text("%s", iso_convergence::formatNumber(sample.distanceProbeToMesh).c_str());
+                    ImGui::TableNextColumn(); ImGui::Text("%s", iso_convergence::formatNumber(sample.minimumGradientLocal).c_str());
+                    ImGui::TableNextColumn(); ImGui::Text("%s", iso_convergence::formatNumber(sample.maxAbsFieldResidualLocal).c_str());
+                    ImGui::TableNextColumn(); ImGui::Text("%s", iso_convergence::formatNumber(sample.symmetricHausdorff).c_str());
+                }
+                ImGui::EndTable();
+            }
+        }
+        if (!convergence_message_.empty())
+            ImGui::TextWrapped("%s", convergence_message_.c_str());
+    }
+    // END THESIS CONVERGENCE ANALYSIS METHODS
     void get_cell_corners(GridCorner corners[8]) const
     {
         static constexpr const char* names[8] = {"C000", "C100", "C110", "C010", "C001", "C101", "C111", "C011"};
