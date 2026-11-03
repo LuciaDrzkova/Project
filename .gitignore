@@ -37,3 +37,7 @@ isosurface_slices
 singularity_sweep/singularity_sweep_viewer.html
 imgui.ini
 .DS_Store
+# Local-only thesis experiments (intentionally not committed)
+/experiments/
+/install_experiments.py
+/GITIGNORE_ENTRY.txt

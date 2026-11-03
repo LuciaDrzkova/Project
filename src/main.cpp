@@ -10,6 +10,8 @@
 #include "SurfaceCatalogue.h"
 #include "IsosurfaceSlices.h"
 #include "SingularityConvergence.h"
+#include "SingularityResearch.h"
+#include "ProjectPaths.h"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -23,6 +25,8 @@
 #include <cmath>
 #include <chrono>
 #include <exception>
+#include <stdexcept>
+#include <filesystem>
 #include <iostream>
 #include <cstddef>
 #include <cstdio>
@@ -1148,12 +1152,48 @@ private:
             convergence_analysis_ = iso_convergence::analyze(ast_.get(), options);
             convergence_analysis_available_ = true;
 
+            // BEGIN SINGULARITY RESEARCH ANALYSIS INTEGRATION
+            // Each click gets its own timestamped run directory. Source code stays
+            // under src/ and tests/; experiments/ contains generated results only.
+#ifdef ISOSURFACE_PROJECT_ROOT
+            const std::filesystem::path experiment_root =
+                std::filesystem::path(ISOSURFACE_PROJECT_ROOT) / "experiments";
+#else
+            const std::filesystem::path experiment_root =
+                std::filesystem::current_path() / "experiments";
+#endif
+            std::filesystem::create_directories(experiment_root);
+            const auto now = std::chrono::system_clock::now();
+            const auto stamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                now.time_since_epoch()).count();
+            std::filesystem::path run_directory =
+                experiment_root / ("run_" + std::to_string(stamp));
+            for (std::size_t suffix = 1; std::filesystem::exists(run_directory); ++suffix)
+                run_directory = experiment_root /
+                    ("run_" + std::to_string(stamp) + "_" + std::to_string(suffix));
+            std::filesystem::create_directories(run_directory);
+
             std::string write_error;
-            if (iso_convergence::writeCsv("singularity_convergence.csv",
-                                          convergence_analysis_, &write_error))
-                convergence_message_ = "Saved singularity_convergence.csv. Numerical diagnostics only, not a proof.";
-            else
-                convergence_message_ = write_error;
+            const auto result_path = [&run_directory](const char* filename) {
+                return (run_directory / filename).string();
+            };
+            if (!iso_convergence::writeCsv(result_path("singularity_convergence.csv"),
+                                           convergence_analysis_, &write_error))
+                throw std::runtime_error(write_error);
+
+            const iso_research::ResearchAnalysis research =
+                iso_research::analyze(ast_.get(), options, 3);
+            if (!iso_research::writeTaylorCsv(result_path("singularity_taylor.csv"), research, &write_error))
+                throw std::runtime_error(write_error);
+            if (!iso_research::writeCriticalPointsCsv(result_path("singularity_critical_points.csv"), research, &write_error))
+                throw std::runtime_error(write_error);
+            if (!iso_research::writeTriangleGeometryCsv(result_path("singularity_triangle_geometry.csv"), research, &write_error))
+                throw std::runtime_error(write_error);
+
+            convergence_message_ =
+                "Saved four CSV files in " + run_directory.string() + ".\n" + research.summary +
+                "\nThe Newton search and triangle-sampled distances are numerical diagnostics, not proofs.";
+            // END SINGULARITY RESEARCH ANALYSIS INTEGRATION
         }
         catch (const std::exception& error)
         {
@@ -1198,7 +1238,7 @@ private:
                 ImGui::TableSetupColumn("d(P, mesh)");
                 ImGui::TableSetupColumn("min |grad F|");
                 ImGui::TableSetupColumn("max |F| local");
-                ImGui::TableSetupColumn("local d_H proxy");
+                ImGui::TableSetupColumn("legacy vertex d_H");
                 ImGui::TableHeadersRow();
                 for (const auto& sample : a.samples)
                 {

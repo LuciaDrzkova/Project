@@ -42,6 +42,20 @@ endif()
 find_package(Threads REQUIRED)
 add_executable(isosurface_lab src/main.cpp)
 target_include_directories(isosurface_lab PRIVATE src)
+# Embed the source directory through a generated header. Do not use
+# target_compile_definitions for a path: paths containing spaces can be split
+# into invalid preprocessor definitions by CMake/compiler command-line quoting.
+set(ISOSURFACE_PROJECT_ROOT_VALUE "${CMAKE_SOURCE_DIR}")
+string(REPLACE "\\" "\\\\" ISOSURFACE_PROJECT_ROOT_VALUE "${ISOSURFACE_PROJECT_ROOT_VALUE}")
+string(REPLACE "\"" "\\\"" ISOSURFACE_PROJECT_ROOT_VALUE "${ISOSURFACE_PROJECT_ROOT_VALUE}")
+set(ISOSURFACE_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${ISOSURFACE_GENERATED_INCLUDE_DIR}")
+configure_file(
+    "${CMAKE_SOURCE_DIR}/src/ProjectPaths.h.in"
+    "${ISOSURFACE_GENERATED_INCLUDE_DIR}/ProjectPaths.h"
+    @ONLY
+)
+target_include_directories(isosurface_lab PRIVATE "${ISOSURFACE_GENERATED_INCLUDE_DIR}")
 target_link_libraries(isosurface_lab PRIVATE pmp pmp_vis Threads::Threads)
 
 # Math/parser/extraction tests are independent of the GUI and PMP viewer.
@@ -90,3 +104,9 @@ add_test(
 add_executable(isosurface_singularity_convergence_tests tests/test_singularity_convergence.cpp)
 target_include_directories(isosurface_singularity_convergence_tests PRIVATE src)
 add_test(NAME singularity_convergence_regression COMMAND isosurface_singularity_convergence_tests)
+
+# Local thesis research analysis: Taylor jets, local isolation assessment,
+# perturbed-family stationary-point search, and triangle-sampled geometry.
+add_executable(isosurface_singularity_research_tests tests/test_singularity_research.cpp)
+target_include_directories(isosurface_singularity_research_tests PRIVATE src)
+add_test(NAME singularity_research_analysis COMMAND isosurface_singularity_research_tests)

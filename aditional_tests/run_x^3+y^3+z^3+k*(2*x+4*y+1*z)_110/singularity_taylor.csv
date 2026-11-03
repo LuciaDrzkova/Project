@@ -1,0 +1,3 @@
+component,expression,first_nonzero_jet_order,smooth_jet,value,gx,gy,gz,hxx,hxy,hxz,hyy,hyz,hzz,hessian_determinant,eigenvalue_1,eigenvalue_2,eigenvalue_3,c000,c100,c010,c001,c200,c110,c101,c020,c011,c002,c300,c210,c201,c120,c111,c102,c030,c021,c012,c003,affine_status,reference_isolation_status,probe_x,probe_y,probe_z
+"F","(((x)^(3))+((y)^(3)))+((z)^(3))",3,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,1,"STRUCTURALLY_AFFINE_IN_K","DEGENERATE_HESSIAN_ISOLATION_INCONCLUSIVE",0,0,0
+"G","(((2)*(x))+((4)*(y)))+(z)",1,1,0,2,4,1,0,0,0,0,0,0,0,0,0,0,0,2,4,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,"STRUCTURALLY_AFFINE_IN_K","DEGENERATE_HESSIAN_ISOLATION_INCONCLUSIVE",0,0,0
