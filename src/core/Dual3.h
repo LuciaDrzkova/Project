@@ -61,6 +61,26 @@ inline Dual3 operator/(const Dual3& a, const Dual3& b) {
 // unqualified name, so the same AST-walking code works whether it is
 // producing a plain value (T = double) or a value-with-gradient (T = Dual3).
 
+// Integer exponents (x^2, pow(x,8), ...) dominate the catalogue and the batch
+// G list. Exponentiation by squaring is several times cheaper than std::pow
+// and is exact up to a few ulps; any other exponent falls back to std::pow.
+inline bool smallIntegerExponent(double b, int& n) {
+    if (!(std::fabs(b) <= 64.0)) return false; // also rejects NaN
+    n = static_cast<int>(b);
+    return static_cast<double>(n) == b;
+}
+inline double powInt(double a, int n) {
+    unsigned m = n < 0 ? static_cast<unsigned>(-n) : static_cast<unsigned>(n);
+    double result = 1.0;
+    double base = a;
+    while (m != 0) {
+        if (m & 1u) result *= base;
+        m >>= 1;
+        if (m != 0) base *= base;
+    }
+    return n < 0 ? 1.0 / result : result;
+}
+
 inline double mc_sin(double a)  { return std::sin(a); }
 inline double mc_cos(double a)  { return std::cos(a); }
 inline double mc_tan(double a)  { return std::tan(a); }
@@ -68,7 +88,10 @@ inline double mc_exp(double a)  { return std::exp(a); }
 inline double mc_log(double a)  { return std::log(a); }
 inline double mc_sqrt(double a) { return std::sqrt(a); }
 inline double mc_abs(double a)  { return std::fabs(a); }
-inline double mc_pow(double a, double b) { return std::pow(a, b); }
+inline double mc_pow(double a, double b) {
+    int n = 0;
+    return smallIntegerExponent(b, n) ? powInt(a, n) : std::pow(a, b);
+}
 inline double mc_min(double a, double b) { return std::min(a, b); }
 inline double mc_max(double a, double b) { return std::max(a, b); }
 
@@ -107,8 +130,9 @@ inline Dual3 mc_pow(const Dual3& a, const Dual3& b) {
     // Most expressions use a constant exponent (b.dx==b.dy==b.dz==0), in
     // which case this correctly reduces to the ordinary power rule
     // b * a^(b-1) * a' for any sign of a.
-    double val = std::pow(a.v, b.v);
-    double coeffA = b.v * std::pow(a.v, b.v - 1.0);
+    // A zero exponent has derivative 0 (not 0 * a^-1, which is NaN at a=0).
+    const double val = mc_pow(a.v, b.v);
+    const double coeffA = (b.v == 0.0) ? 0.0 : b.v * mc_pow(a.v, b.v - 1.0);
     if (b.dx == 0.0 && b.dy == 0.0 && b.dz == 0.0) {
         return Dual3(val, coeffA * a.dx, coeffA * a.dy, coeffA * a.dz);
     }

@@ -2,8 +2,8 @@
 // Headless test: depends only on Expr.h and Isosurface.h, not on GLFW/ImGui/PMP.
 // It reports (rather than hiding) cases where no regular, topology-clean pair exists.
 
-#include "Expr.h"
-#include "Isosurface.h"
+#include "core/Expr.h"
+#include "core/Isosurface.h"
 
 #include <algorithm>
 #include <array>
@@ -49,7 +49,8 @@ struct SurfaceSpec {
     Behavior behavior;
 };
 
-// Keep in sync with the 17 selectable formulas in src/main.cpp.
+// The 17 original viewer presets, kept as a fixed list so sweep CSVs stay
+// comparable over time (the full catalogue lives in src/core/SurfaceCatalogue.h).
 const std::array<SurfaceSpec, 17> kSurfaces = {{
     {"Plane example: x^3-k*y", "plane_x3_ky", "x*x*x - k*y",
      "At k=0 the singular set is the plane x=0 (not an isolated point).", Behavior::RegularizedByNonzeroK},

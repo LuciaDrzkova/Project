@@ -1,4 +1,4 @@
-#include "SingularityBatch.h"
+#include "analysis/SingularityBatch.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -36,7 +36,7 @@ int main() {
     const std::string family = iso_batch::composeFamilyExpression(
         "x^3+y^3+z^3", "x*y");
     NodePtr ast = parseExpression(family);
-    const auto affine = iso_convergence::detail::decomposeAffineK(ast.get());
+    const auto affine = iso_convergence::decomposeAffineK(ast.get());
     require(affine.valid, "constructed F+kG expression is affine in k");
     require(iso_batch::containsKVariable(ast.get()),
             "combined family contains k as the intended parameter");

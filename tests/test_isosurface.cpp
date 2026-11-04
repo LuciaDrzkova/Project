@@ -1,8 +1,8 @@
 // Standalone correctness check for the (cube-based) Marching Cubes
 // isosurface extractor + AD gradients, independent of any windowing/GL
 // code so it can run in a headless sandbox. Not part of the shipped app.
-#include "Expr.h"
-#include "Isosurface.h"
+#include "core/Expr.h"
+#include "core/Isosurface.h"
 #include <cstdio>
 #include <cmath>
 #include <map>

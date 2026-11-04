@@ -1,48 +1,123 @@
-# Install the k -> 0 convergence button and range/count inputs
+# Isosurface Singularity Lab
 
-This installer is designed for the public `LuciaDrzkova/Project` C++ project. It does not connect to GitHub and does not modify the public repository. Run it against your own local checkout.
+Interactive viewer and headless toolkit for studying singularities of
+parameterised implicit surfaces
 
-## Easiest way
+    S_k = { (x, y, z) : F(x, y, z, k) = 0 }
 
-1. Download `install_convergence.py`.
-2. Put it in the root of your local `Project` folder (the folder containing `CMakeLists.txt`).
-3. Run from that folder:
+and how they unfold as the parameter `k` moves away from 0 (typically
+`F_k = F + k·G`). The surface is extracted with Marching Cubes. Gradients are
+exact (forward-mode automatic differentiation), and the analysis tools
+measure how `S_k` approaches `S_0` near a chosen point.
 
-   ```bash
-   python install_convergence.py
-   ```
+## Build and run
 
-   Or pass the project path explicitly:
+Requirements: a C++17 compiler, CMake ≥ 3.18 and OpenGL 3.3. The viewer
+downloads [pmp-library](https://github.com/pmp-library/pmp-library) 3.0 on
+first configure.
 
-   ```bash
-   python install_convergence.py /path/to/Project
-   ```
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+./build/isosurface_lab                      # the interactive viewer
+ctest --test-dir build --output-on-failure  # all tests
+```
 
-4. Reconfigure and build:
+Use `-DISOLAB_BUILD_APP=OFF` to build only the headless library, tests and
+diagnostics tools (no pmp download, no OpenGL needed).
 
-   ```bash
-   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-   cmake --build build -j
-   ctest --test-dir build --output-on-failure -R singularity_convergence_regression
-   ```
+## What the viewer does
 
-The script is self-contained: it installs `src/SingularityConvergence.h`, `tests/test_singularity_convergence.cpp`, inserts the new controls and button into `src/main.cpp`, and appends the test target to the existing `CMakeLists.txt`. It is intended to be re-runnable without duplicating UI code. Before changing existing files it creates one-time backups ending in `.before_convergence`.
+- **Function and k**: type any expression in `x, y, z, k` (operators
+  `+ - * / ^`, functions `sin cos tan exp log/ln sqrt abs pow min max`) or
+  pick one of 34 catalogued families, then drag `k`.
+- **Surface**: coloured by `|∇F|` (purple = flat or singular, red = steep);
+  optional gradient glyphs, sampling grid and cell-corner inspector.
+- **2D slices**: grid-aligned cross-sections with marching squares, a slice
+  gallery and full-precision CSV export.
+- **Convergence analysis**: for a range of `k`, measures the point-to-mesh
+  distance, local gradients, residuals and Hausdorff-type distances to the
+  `k = 0` reference. It also runs Taylor-jet, isolation and stationary-point
+  diagnostics. Results go to `experiments/run_<timestamp>/` (four CSV files).
+- **Batch**: runs the same analysis for `F + k·G_i` over 25 perturbations
+  `G_i`.
 
-## New UI
+Long analyses run in the background, and the viewer only redraws when
+something changes, so it uses no CPU while idle.
 
-Inside **Gradient diagnostics**, the button **Analyze surface convergence** sits beside the k-sweep title. The controls below let you set:
+## Architecture
 
-- `k minimum`
-- `k maximum`
-- `Number of k samples` (3–101)
-- mesh resolution
+```
+src/
+├── core/        header-only math engine, no GUI dependencies
+│   ├── Expr.h             parser → AST; templated evaluation (double, Dual3, jets)
+│   ├── ExprProgram.h      AST compiled to a flat program; batched row evaluation
+│   ├── Dual3.h            forward-mode AD number (value + exact gradient)
+│   ├── Isosurface.h       marching cubes: sampling, zero tie-break, extraction
+│   ├── IsosurfaceSlices.h grid-aligned 2D slices + CSV export
+│   ├── SurfaceCatalogue.h the 34 parameterised families (single source of truth)
+│   ├── Grid.h             lattice coordinates shared by every component
+│   ├── Geometry.h         points, point–triangle distance, KD-tree, BVH
+│   ├── Parallel.h         fork-join parallelFor (nested calls run serially)
+│   └── CsvFormat.h        CSV quoting and fast round-trip number formatting
+├── analysis/    thesis diagnostics built on core
+│   ├── SingularityConvergence.h  S_k → S_0 metrics, affine F + kG split, metadata
+│   ├── SingularityResearch.h     Taylor jets, isolation, Newton search, mesh
+│   │                             comparison; analyzeFamily() runs both together
+│   └── SingularityBatch.h        25-family F + kG batch runner
+└── app/         the PMP/ImGui viewer
+    ├── main.cpp                entry point
+    ├── IsosurfaceViewer.h/.cpp class declaration; frame loop, surface, picking, overlays
+    ├── ViewerPanels.cpp        ImGui control panel and setup dialog
+    ├── SliceGallery.cpp        2D slice state and gallery window
+    ├── AnalysisJobs.cpp        background convergence analysis and batch
+    ├── OverlayRenderer.h/.cpp  all raw OpenGL for helper geometry
+    ├── BackgroundJob.h         worker-thread job polled from the UI thread
+    └── ColorMap.h              colour ramp
+tests/           unit/regression tests and headless diagnostics tools
+```
 
-The program samples the selected interval uniformly, including both endpoints. If `k=0` lands on a sample, it is recorded in the CSV but excluded from positive/negative trend fits because `k=0` is the reference surface. If the selected interval does not cross zero, the report can only describe the sampled one-sided range.
+Dependencies only point downwards: `app → analysis → core`. CMake exposes
+`core` and `analysis` as the header-only target `isolab::core`, which every
+test and tool links. The viewer adds pmp-library on top.
 
-The results are exported to `singularity_convergence.csv` in the program's working directory. The output gives point-to-mesh distance, sampled gradient magnitude, field residuals, and a local sampled-vertex Hausdorff proxy. These are numerical diagnostics, not exact Hausdorff distances or proofs. Repeat with higher grid resolution and inspect the CSV before drawing thesis-level conclusions. Large sample counts combined with high mesh resolution increase runtime.
+### Extraction pipeline (`core/Isosurface.h`)
 
-## Notes
+1. **Sample**: `F` is compiled once (`ExprProgram`) and evaluated row by row
+   at the lattice nodes `-h + 2h·i/N`, in parallel across x-slabs.
+2. **Zero tie-break**: a node with `F = 0` exactly, or `|F|` below 1e-10 of
+   its largest face neighbour (rounding noise), would make several edge
+   crossings collapse onto it. If it has two or more face neighbours of
+   opposite sign, it gets a positive bias of 5% of the smallest off-surface
+   neighbour value. Grid-aligned zero sets with a single crossing per node,
+   such as the plane `x = 0` of `x³` at `k = 0`, stay exact.
+3. **March**: each cut edge is interpolated once, always from its lower to
+   its upper node, and cached in a rolling two-plane table. Neighbouring
+   cells therefore share bit-identical vertices. The result carries
+   `vertexIds` so consumers can weld the mesh without hashing positions.
+4. **Gradients**: each vertex normal and `|∇F|` comes from evaluating `F`
+   with `Dual3` at the vertex.
 
-- The expression should represent a family affine in `k`, i.e. `F(x,y,z) + k*G(x,y,z)`, when interpreting results as a linear unfolding.
-- The script checks that required source anchors match the current main file before editing. If it refuses to install due to a missing anchor, it leaves the project unchanged; share your local `src/main.cpp` and the installer can be adapted.
-- No files in the public GitHub repository were changed by preparing this package.
+### Analysis pipeline (`analysis/`)
+
+`iso_research::analyzeFamily()` extracts each `k` once, in parallel, and runs
+the convergence metrics and the research triangle-geometry comparison on that
+same mesh. The stationary-point search also runs in parallel per `k`. All
+results are written in the requested `k` order, independent of scheduling.
+
+## Tests and diagnostics tools
+
+| Executable | Purpose |
+|---|---|
+| `isosurface_lab_tests` | parser, AD gradients, marching-cubes topology (spheres, torus, cusp scaling) |
+| `isosurface_slice_extraction_tests` | slice lattice and CSV columns |
+| `isosurface_singularity_convergence_tests` | convergence trends and CSV metadata |
+| `isosurface_singularity_research_tests` | jets, isolation, Newton search, triangle distances |
+| `isosurface_singularity_batch_tests` | batch parsing and folder naming |
+| `isosurface_deformation_criteria_tests`, `isosurface_unfolding_criterion_tests` | analytic singularity criteria |
+| `isosurface_singularity_sweep_tests` | k sweep over the built-in families (writes `singularity_sweep_artifacts/`) |
+| `isosurface_mesh_interpolation_tests` | mesh-to-mesh interpolation experiment |
+| `isosurface_singularity_diagnostics` | full catalogue diagnostics CLI, see `tests/SINGULARITY_DIAGNOSTICS.md` and `tests/run_resolution_series.py` |
+
+All measurements are numerical diagnostics, not proofs. Read the CSV
+metadata columns before drawing conclusions from them.

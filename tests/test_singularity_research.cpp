@@ -1,7 +1,7 @@
-#include "Expr.h"
-#include "Isosurface.h"
-#include "SingularityConvergence.h"
-#include "SingularityResearch.h"
+#include "core/Expr.h"
+#include "core/Isosurface.h"
+#include "analysis/SingularityConvergence.h"
+#include "analysis/SingularityResearch.h"
 #include <cmath>
 #include <iostream>
 #include <string>

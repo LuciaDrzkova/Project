@@ -1,9 +1,9 @@
 #pragma once
 
 // Runs a batch of families F(x,y,z) + k G_i(x,y,z), exporting the same four
-// CSV reports as the interactive single-run convergence action.
+// CSV reports as the interactive single-run convergence action. Families run
+// one after another; within a family every k sample is processed in parallel.
 
-#include "SingularityConvergence.h"
 #include "SingularityResearch.h"
 
 #include <algorithm>
@@ -85,14 +85,7 @@ inline std::string composeFamilyExpression(const std::string& fExpression,
     return "(" + trim(fExpression) + ")+k*(" + trim(gExpression) + ")";
 }
 
-inline bool containsKVariable(const Node* node) {
-    if (!node) return false;
-    if (node->type == Node::VAR_K) return true;
-    for (const auto& child : node->kids) {
-        if (containsKVariable(child.get())) return true;
-    }
-    return false;
-}
+inline bool containsKVariable(const Node* node) { return exprContains(node, Node::VAR_K); }
 
 // Convert an expression into a portable, readable folder component. The
 // original unsanitized expressions remain recorded in the CSV metadata.
@@ -132,11 +125,11 @@ inline std::string safeFolderComponent(const std::string& expression,
     return result;
 }
 
+// Readable, expression-based run folder; name collisions get _02, _03, ... suffixes.
 inline std::filesystem::path uniqueRunDirectory(
     const std::filesystem::path& parent,
     const std::string& fExpression,
-    const std::string& gExpression,
-    std::size_t index) {
+    const std::string& gExpression) {
     const std::string fPart = safeFolderComponent(fExpression, 34);
     const std::string gPart = safeFolderComponent(gExpression, 34);
     const std::string base = "run_" + fPart + "_plus_k_" + gPart;
@@ -147,7 +140,6 @@ inline std::filesystem::path uniqueRunDirectory(
         name << base << "_" << std::setw(2) << std::setfill('0') << suffix++;
         candidate = parent / name.str();
     }
-    (void)index; // The readable name is expression-based; collisions get suffixes.
     return candidate;
 }
 
@@ -196,8 +188,7 @@ inline BatchResult runBatch(const Settings& settings,
     for (std::size_t i = 0; i < settings.gExpressions.size(); ++i) {
         RunReport report;
         report.gExpression = settings.gExpressions[i];
-        report.directory = uniqueRunDirectory(
-            result.fDirectory, settings.fExpression, report.gExpression, i + 1);
+        report.directory = uniqueRunDirectory(result.fDirectory, settings.fExpression, report.gExpression);
 
         try {
             NodePtr gAst = parseExpression(report.gExpression);
@@ -207,8 +198,7 @@ inline BatchResult runBatch(const Settings& settings,
             const std::string familyExpression = composeFamilyExpression(
                 settings.fExpression, report.gExpression);
             NodePtr familyAst = parseExpression(familyExpression);
-            const auto affine = iso_convergence::detail::decomposeAffineK(familyAst.get());
-            if (!affine.valid)
+            if (!iso_convergence::decomposeAffineK(familyAst.get()).valid)
                 throw std::invalid_argument("The constructed family could not be verified as affine in k.");
 
             iso_convergence::Options options;
@@ -219,10 +209,11 @@ inline BatchResult runBatch(const Settings& settings,
             options.kValues = kValues;
             options.familyExpression = familyExpression;
 
-            const iso_convergence::Analysis convergence =
-                iso_convergence::analyze(familyAst.get(), options);
-            const iso_research::ResearchAnalysis research =
-                iso_research::analyze(familyAst.get(), options, 3);
+            // One shared, parallel mesh pass feeds both analyses.
+            const iso_research::FamilyAnalysis analysis =
+                iso_research::analyzeFamily(familyAst.get(), options, 3);
+            const iso_convergence::Analysis& convergence = analysis.convergence;
+            const iso_research::ResearchAnalysis& research = analysis.research;
 
             std::filesystem::create_directories(report.directory);
             std::string writeError;

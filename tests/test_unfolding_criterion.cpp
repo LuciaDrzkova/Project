@@ -29,7 +29,7 @@
 //
 // Headless: depends only on Expr.h / Dual3.h, like test_singularity_sweep.cpp.
 
-#include "Expr.h"
+#include "core/Expr.h"
 
 #include <array>
 #include <cmath>

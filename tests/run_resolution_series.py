@@ -2,7 +2,7 @@
 """Run broad catalogue once, then selected difficult families across resolutions.
 
 Run from the repository root after building isosurface_singularity_diagnostics:
-  python3 singularity_diagnostics_update/run_resolution_series.py
+  python3 tests/run_resolution_series.py
 
 Defaults:
   * broad 38-surface catalogue + phase regression at resolution 48;

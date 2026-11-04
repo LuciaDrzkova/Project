@@ -1,6 +1,6 @@
 # Shared parameterized surface catalogue and diagnostics
 
-The viewer and `test_singularity_diagnostics.cpp` use `src/SurfaceCatalogue.h` as their single source of truth.
+The viewer and `test_singularity_diagnostics.cpp` use `src/core/SurfaceCatalogue.h` as their single source of truth.
 The catalogue contains 34 parameterized families. Every expression depends on `k`; k-independent control shapes are deliberately excluded.
 
 | ID | Expression | Initial k | Expected behavior |

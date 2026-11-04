@@ -13,9 +13,9 @@
 // Topology findings are diagnostic, not automatically interpreted as proof
 // that a mathematical surface is singular. See tests/SINGULARITY_DIAGNOSTICS.md.
 
-#include "Expr.h"
-#include "Isosurface.h"
-#include "SurfaceCatalogue.h"
+#include "core/Expr.h"
+#include "core/Isosurface.h"
+#include "core/SurfaceCatalogue.h"
 
 #include <algorithm>
 #include <array>
@@ -389,81 +389,13 @@ static MeshMetrics analyzeMesh(const IsosurfaceResult& mesh, int resolution, dou
 }
 
 // Re-extract an isosurface from a scalar grid that was reconstructed from the
-// two parameter samples. This deliberately mirrors the production edge/table
-// path so the reconstructed field is not just compared to itself algebraically.
+// two parameter samples. Isosurface::extract runs the production pipeline
+// (zero tie-break, edge interpolation, triangle table, AD gradients) on the
+// supplied values, so the reconstructed field is not just compared to itself
+// algebraically.
 static IsosurfaceResult extractFromSampledField(const Node* ast, double k, int res, double h,
                                                 const std::vector<double>& values) {
-    IsosurfaceResult result;
-    const auto t0=std::chrono::steady_clock::now();
-    if(res<2) res=2;
-    const int N=res+1;
-    const double step=2.0*h/res;
-    const auto idx=[N](int i,int j,int z){return (static_cast<std::size_t>(i)*N+j)*N+z;};
-    const auto pos=[&](int i,int j,int z){return std::array<double,3>{-h+i*step,-h+j*step,-h+z*step};};
-    const Dual3 kd(k,0,0,0);
-    const float degenerateAreaEps=static_cast<float>(step*step)*1e-8f;
-
-    auto cutEdge=[&](const std::array<double,3>& pa,double fa,
-                     const std::array<double,3>& pb,double fb) {
-        const double denom=fa-fb;
-        const double t=(std::fabs(denom)>0.0)?fa/denom:0.5;
-        const double px=pa[0]+t*(pb[0]-pa[0]);
-        const double py=pa[1]+t*(pb[1]-pa[1]);
-        const double pz=pa[2]+t*(pb[2]-pa[2]);
-        const Dual3 r=evalExpr<Dual3>(ast,Dual3(px,1,0,0),Dual3(py,0,1,0),Dual3(pz,0,0,1),kd);
-        SurfaceVertex v{};
-        v.px=static_cast<float>(px); v.py=static_cast<float>(py); v.pz=static_cast<float>(pz);
-        const double gm=gradLength(r);
-        v.gradMag=static_cast<float>(gm);
-        if(gm>1e-12) { v.nx=static_cast<float>(r.dx/gm); v.ny=static_cast<float>(r.dy/gm); v.nz=static_cast<float>(r.dz/gm); }
-        else { v.nx=0; v.ny=0; v.nz=1; }
-        return v;
-    };
-    auto emitTri=[&](const SurfaceVertex& a,const SurfaceVertex& b,const SurfaceVertex& c) {
-        const float e1x=b.px-a.px,e1y=b.py-a.py,e1z=b.pz-a.pz;
-        const float e2x=c.px-a.px,e2y=c.py-a.py,e2z=c.pz-a.pz;
-        const float nx=e1y*e2z-e1z*e2y, ny=e1z*e2x-e1x*e2z, nz=e1x*e2y-e1y*e2x;
-        const float crossSq=nx*nx+ny*ny+nz*nz;
-        if(crossSq<degenerateAreaEps*degenerateAreaEps) {
-            ++result.skippedDegenerateTriangles;
-            result.skippedDegenerateGeometry.push_back({a.px,a.py,a.pz,b.px,b.py,b.pz,c.px,c.py,c.pz});
-            return;
-        }
-        const float gnx=a.nx+b.nx+c.nx,gny=a.ny+b.ny+c.ny,gnz=a.nz+b.nz+c.nz;
-        if(nx*gnx+ny*gny+nz*gnz<0) {
-            result.vertices.push_back(a); result.vertices.push_back(c); result.vertices.push_back(b);
-        } else {
-            result.vertices.push_back(a); result.vertices.push_back(b); result.vertices.push_back(c);
-        }
-        result.maxGradMag=std::max(result.maxGradMag,static_cast<double>(std::max({a.gradMag,b.gradMag,c.gradMag})));
-    };
-
-    for(int i=0;i<res;++i) for(int j=0;j<res;++j) for(int z=0;z<res;++z) {
-        std::array<double,3> cp[8];
-        double cv[8];
-        int cubeindex=0;
-        for(int c=0;c<8;++c) {
-            const int ci=i+kCubeCornerOffset[c][0], cj=j+kCubeCornerOffset[c][1], cz=z+kCubeCornerOffset[c][2];
-            cp[c]=pos(ci,cj,cz);
-            cv[c]=values[idx(ci,cj,cz)];
-            if(cv[c]<0.0) cubeindex|=(1<<c);
-        }
-        if(cubeindex==0 || cubeindex==255) continue;
-        SurfaceVertex edgeVerts[12]; bool done[12]={false};
-        auto edgeVertex=[&](int e)->const SurfaceVertex& {
-            if(!done[e]) {
-                const int ca=kEdgeCorners[e][0], cb=kEdgeCorners[e][1];
-                edgeVerts[e]=cutEdge(cp[ca],cv[ca],cp[cb],cv[cb]);
-                done[e]=true;
-            }
-            return edgeVerts[e];
-        };
-        const int8_t* tri=kTriTable[cubeindex];
-        for(int t=0;tri[t]!=-1;t+=3)
-            emitTri(edgeVertex(tri[t]),edgeVertex(tri[t+1]),edgeVertex(tri[t+2]));
-    }
-    result.buildMillis=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();
-    return result;
+    return Isosurface::extract(ast, k, res, h, values);
 }
 
 static double pointTriangleDistanceSquared(const Vec3& p,const Vec3& a,const Vec3& b,const Vec3& c) {
@@ -949,7 +881,7 @@ int main(int argc, char** argv) {
                 std::vector<double> reconstructedSamples(static_cast<std::size_t>(N)*N*N);
                 double maxFieldError=0.0, sumSquaredError=0.0;
                 for(int i=0;i<N;++i) for(int j=0;j<N;++j) for(int z=0;z<N;++z) {
-                    const double x=-h+i*hStep,y=-h+j*hStep,zz=-h+z*hStep;
+                    const double x=gridCoordinate(i,resolution,h),y=gridCoordinate(j,resolution,h),zz=gridCoordinate(z,resolution,h);
                     const double fm=evalExpr<double>(ast.get(),x,y,zz,kNeg);
                     const double fp=evalExpr<double>(ast.get(),x,y,zz,kPos);
                     const double f0=evalExpr<double>(ast.get(),x,y,zz,0.0);

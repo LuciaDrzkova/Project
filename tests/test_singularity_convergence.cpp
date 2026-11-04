@@ -1,7 +1,7 @@
 // Headless regression tests for the k -> 0 convergence diagnostics.
 // These tests verify numerical trends for selected cubic examples; they do not
 // prove a general convergence theorem or certify isolation of arbitrary germs.
-#include "SingularityConvergence.h"
+#include "analysis/SingularityConvergence.h"
 
 #include <cmath>
 #include <cstdlib>

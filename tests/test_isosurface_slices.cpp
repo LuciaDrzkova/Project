@@ -1,5 +1,5 @@
-#include "Expr.h"
-#include "IsosurfaceSlices.h"
+#include "core/Expr.h"
+#include "core/IsosurfaceSlices.h"
 
 #include <cmath>
 #include <filesystem>

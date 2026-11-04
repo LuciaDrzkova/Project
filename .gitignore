@@ -1,4 +1,4 @@
-# CMake build output
+# Build output
 /build/
 /cmake-build-*/
 CMakeFiles/
@@ -12,32 +12,23 @@ cmake_install.cmake
 *.dylib
 *.dSYM/
 
-# Generated singularity diagnostic results
+# Generated results (viewer and headless tools)
+/experiments/
+/isosurface_slices/
+/singularity_sweep_artifacts/
 /singularity_diagnostics_artifacts/
 /singularity_diagnostics_smoke_artifacts/
 /singularity_resolution_series/
-/singularity_sweep_artifacts/
-/diagnostics_mixed_cubic/
 /diagnostics_*/
 singularity_results/quick/diagnostic_meshes/
 mesh_to_mesh_interpolation_results/res_24
 mesh_to_mesh_interpolation_results/res_32
 mesh_to_mesh_interpolation_results/res_48
 
-isosurface_slices
-
-# One-time diagnostic installer package
-/singularity_diagnostics_update/
-
-# Backup created by the diagnostic installer
-/src/Isosurface.h.before_singularity_diagnostics_fix
-
-# macOS
-.DS_Store
-singularity_sweep/singularity_sweep_viewer.html
-imgui.ini
-.DS_Store
-# Local-only thesis experiments (intentionally not committed)
-/experiments/
+# Local-only thesis experiment helpers (intentionally not committed)
 /install_experiments.py
 /GITIGNORE_ENTRY.txt
+
+# Editor / OS
+imgui.ini
+.DS_Store

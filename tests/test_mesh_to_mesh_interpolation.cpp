@@ -15,9 +15,9 @@
 // uniqueness. A correspondence can be ambiguous near a singularity or when the
 // surfaces change topology; those ambiguities are part of what this test measures.
 
-#include "Expr.h"
-#include "Isosurface.h"
-#include "SurfaceCatalogue.h"
+#include "core/Expr.h"
+#include "core/Isosurface.h"
+#include "core/SurfaceCatalogue.h"
 
 #include <algorithm>
 #include <array>

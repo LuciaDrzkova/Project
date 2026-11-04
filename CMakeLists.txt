@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(IsosurfaceSingularityLab LANGUAGES CXX)
+project(IsosurfaceSingularityLab VERSION 1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,108 +10,113 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-include(FetchContent)
-include(CTest)
-enable_testing()
+# Every executable (viewer, tests, diagnostics tools) lands directly in the
+# build directory; tests/run_resolution_series.py and the docs rely on that.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
-# Use the same PMP viewer/rendering setup as LuciaDrzkova/Isosurfaces (report).
-set(PMP_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(PMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(PMP_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-set(PMP_BUILD_VIS ON CACHE BOOL "" FORCE)
-set(PMP_INSTALL ON CACHE BOOL "" FORCE)
-set(PMP_STRICT_COMPILATION OFF CACHE BOOL "" FORCE)
-FetchContent_Declare(
-  pmp-library
-  GIT_REPOSITORY https://github.com/pmp-library/pmp-library.git
-  GIT_TAG 3.0.0
-)
-FetchContent_MakeAvailable(pmp-library)
+option(ISOLAB_BUILD_APP "Build the interactive viewer (downloads pmp-library)" ON)
+include(CTest) # provides BUILD_TESTING (ON by default)
 
-# Some pmp-library versions need the fetched GLFW include directory when
-# compiling Dear ImGui's GLFW backend. Guard the optional target/path.
-if(TARGET imgui)
-  file(GLOB _pmp_glfw_dirs "${pmp-library_SOURCE_DIR}/external/glfw-*")
-  list(LENGTH _pmp_glfw_dirs _pmp_glfw_count)
-  if(_pmp_glfw_count GREATER 0)
-    list(GET _pmp_glfw_dirs 0 _pmp_glfw_dir)
-    target_include_directories(imgui PRIVATE "${_pmp_glfw_dir}/include")
-  endif()
+# -----------------------------------------------------------------------------
+# isolab::core - header-only math + analysis library (src/core, src/analysis).
+# No GUI dependencies; shared by the viewer and every test/diagnostics tool.
+# -----------------------------------------------------------------------------
+find_package(Threads REQUIRED)
+
+add_library(isolab_core INTERFACE)
+add_library(isolab::core ALIAS isolab_core)
+target_include_directories(isolab_core INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(isolab_core INTERFACE cxx_std_17)
+target_link_libraries(isolab_core INTERFACE Threads::Threads)
+
+# Floating-point std::to_chars makes the large CSV exports ~4x faster. libc++
+# provides it without advertising __cpp_lib_to_chars, so probe for it.
+include(CheckCXXSourceCompiles)
+check_cxx_source_compiles([[
+  #include <charconv>
+  int main() {
+    char buffer[40];
+    return std::to_chars(buffer, buffer + 40, 0.1, std::chars_format::general, 17).ptr == buffer;
+  }
+]] ISOLAB_HAVE_FLOAT_TO_CHARS)
+if(ISOLAB_HAVE_FLOAT_TO_CHARS)
+  target_compile_definitions(isolab_core INTERFACE ISO_HAVE_FLOAT_TO_CHARS=1)
 endif()
 
-find_package(Threads REQUIRED)
-add_executable(isosurface_lab src/main.cpp)
-target_include_directories(isosurface_lab PRIVATE src)
-# Embed the source directory through a generated header. Do not use
-# target_compile_definitions for a path: paths containing spaces can be split
-# into invalid preprocessor definitions by CMake/compiler command-line quoting.
-set(ISOSURFACE_PROJECT_ROOT_VALUE "${CMAKE_SOURCE_DIR}")
-string(REPLACE "\\" "\\\\" ISOSURFACE_PROJECT_ROOT_VALUE "${ISOSURFACE_PROJECT_ROOT_VALUE}")
-string(REPLACE "\"" "\\\"" ISOSURFACE_PROJECT_ROOT_VALUE "${ISOSURFACE_PROJECT_ROOT_VALUE}")
-set(ISOSURFACE_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
-file(MAKE_DIRECTORY "${ISOSURFACE_GENERATED_INCLUDE_DIR}")
-configure_file(
-    "${CMAKE_SOURCE_DIR}/src/ProjectPaths.h.in"
-    "${ISOSURFACE_GENERATED_INCLUDE_DIR}/ProjectPaths.h"
-    @ONLY
-)
-target_include_directories(isosurface_lab PRIVATE "${ISOSURFACE_GENERATED_INCLUDE_DIR}")
-target_link_libraries(isosurface_lab PRIVATE pmp pmp_vis Threads::Threads)
+# Strict warnings for this project's own targets only (not for dependencies).
+add_library(isolab_warnings INTERFACE)
+add_library(isolab::warnings ALIAS isolab_warnings)
+target_compile_options(isolab_warnings INTERFACE
+  $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -Wpedantic>
+  $<$<CXX_COMPILER_ID:MSVC>:/W4>)
 
-# Math/parser/extraction tests are independent of the GUI and PMP viewer.
-add_executable(isosurface_lab_tests tests/test_isosurface.cpp)
-target_include_directories(isosurface_lab_tests PRIVATE src)
-add_test(NAME isosurface_correctness COMMAND isosurface_lab_tests)
+# -----------------------------------------------------------------------------
+# isosurface_lab - the interactive PMP/ImGui viewer (src/app).
+# -----------------------------------------------------------------------------
+if(ISOLAB_BUILD_APP)
+  include(FetchContent)
+  # Same PMP viewer/rendering setup as LuciaDrzkova/Isosurfaces (report).
+  set(PMP_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(PMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  set(PMP_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+  set(PMP_BUILD_VIS ON CACHE BOOL "" FORCE)
+  set(PMP_INSTALL ON CACHE BOOL "" FORCE)
+  set(PMP_STRICT_COMPILATION OFF CACHE BOOL "" FORCE)
+  FetchContent_Declare(
+    pmp-library
+    GIT_REPOSITORY https://github.com/pmp-library/pmp-library.git
+    GIT_TAG 3.0.0
+  )
+  FetchContent_MakeAvailable(pmp-library)
 
-# Expanded, headless diagnostics for parameterized isosurface families.
-add_executable(isosurface_singularity_diagnostics tests/test_singularity_diagnostics.cpp)
-target_include_directories(isosurface_singularity_diagnostics PRIVATE src)
-add_test(
-  NAME singularity_diagnostics_smoke
-  COMMAND isosurface_singularity_diagnostics
-          --quick --resolution 20
-          --out ${CMAKE_BINARY_DIR}/singularity_diagnostics_smoke_artifacts
-)
+  # Some pmp-library versions need the fetched GLFW include directory when
+  # compiling Dear ImGui's GLFW backend. Guard the optional target/path.
+  if(TARGET imgui)
+    file(GLOB _pmp_glfw_dirs "${pmp-library_SOURCE_DIR}/external/glfw-*")
+    list(LENGTH _pmp_glfw_dirs _pmp_glfw_count)
+    if(_pmp_glfw_count GREATER 0)
+      list(GET _pmp_glfw_dirs 0 _pmp_glfw_dir)
+      target_include_directories(imgui PRIVATE "${_pmp_glfw_dir}/include")
+    endif()
+  endif()
 
-# Sweep every built-in surface through selected k values.
-add_executable(isosurface_singularity_sweep_tests tests/test_singularity_sweep.cpp)
-target_include_directories(isosurface_singularity_sweep_tests PRIVATE src)
-add_test(NAME singularity_k_sweep COMMAND isosurface_singularity_sweep_tests)
-set_tests_properties(singularity_k_sweep PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+  # Treat dependency headers as system headers so their warnings (e.g. in
+  # imgui.h) do not drown out warnings in our own code.
+  foreach(_dependency IN ITEMS pmp pmp_vis imgui)
+    if(TARGET ${_dependency})
+      get_target_property(_includes ${_dependency} INTERFACE_INCLUDE_DIRECTORIES)
+      if(_includes)
+        set_target_properties(${_dependency} PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_includes}")
+      endif()
+    endif()
+  endforeach()
 
-# Additive mesh-to-mesh interpolation experiment.
-add_executable(isosurface_mesh_interpolation_tests tests/test_mesh_to_mesh_interpolation.cpp)
-target_include_directories(isosurface_mesh_interpolation_tests PRIVATE src)
-add_test(
-  NAME mesh_to_mesh_interpolation_smoke
-  COMMAND $<TARGET_FILE:isosurface_mesh_interpolation_tests>
-          --resolution 20
-          --k-values 0.01,0.001
-          --surfaces plane_x3_ky,mixed_cubic,crossing_planes_xy
-          --out ${CMAKE_BINARY_DIR}/mesh_to_mesh_interpolation_smoke_artifacts
-)
+  add_executable(isosurface_lab
+    src/app/main.cpp
+    src/app/IsosurfaceViewer.cpp
+    src/app/ViewerPanels.cpp
+    src/app/SliceGallery.cpp
+    src/app/AnalysisJobs.cpp
+    src/app/OverlayRenderer.cpp
+  )
+  target_include_directories(isosurface_lab PRIVATE src/app)
 
-# Grid-aligned 2D cross-section extraction regression test.
-add_executable(isosurface_slice_extraction_tests tests/test_isosurface_slices.cpp)
-target_include_directories(isosurface_slice_extraction_tests PRIVATE src)
-add_test(
-  NAME isosurface_2d_slice_extraction
-  COMMAND isosurface_slice_extraction_tests
-          --out ${CMAKE_BINARY_DIR}/isosurface_2d_slice_smoke_artifacts
-)
+  # Embed the source directory through a generated header (experiments/ lives
+  # next to the sources). A header rather than a compile definition keeps
+  # paths with spaces intact.
+  set(ISOSURFACE_PROJECT_ROOT_VALUE "${CMAKE_SOURCE_DIR}")
+  string(REPLACE "\\" "\\\\" ISOSURFACE_PROJECT_ROOT_VALUE "${ISOSURFACE_PROJECT_ROOT_VALUE}")
+  string(REPLACE "\"" "\\\"" ISOSURFACE_PROJECT_ROOT_VALUE "${ISOSURFACE_PROJECT_ROOT_VALUE}")
+  set(ISOSURFACE_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  configure_file(src/app/ProjectPaths.h.in "${ISOSURFACE_GENERATED_INCLUDE_DIR}/ProjectPaths.h" @ONLY)
+  target_include_directories(isosurface_lab PRIVATE "${ISOSURFACE_GENERATED_INCLUDE_DIR}")
 
-# New k -> 0 geometric/gradient convergence experiment, independent of the GUI.
-add_executable(isosurface_singularity_convergence_tests tests/test_singularity_convergence.cpp)
-target_include_directories(isosurface_singularity_convergence_tests PRIVATE src)
-add_test(NAME singularity_convergence_regression COMMAND isosurface_singularity_convergence_tests)
+  target_link_libraries(isosurface_lab PRIVATE isolab::core isolab::warnings pmp pmp_vis)
+endif()
 
-# Local thesis research analysis: Taylor jets, local isolation assessment,
-# perturbed-family stationary-point search, and triangle-sampled geometry.
-add_executable(isosurface_singularity_research_tests tests/test_singularity_research.cpp)
-target_include_directories(isosurface_singularity_research_tests PRIVATE src)
-add_test(NAME singularity_research_analysis COMMAND isosurface_singularity_research_tests)
-
-# Parser and naming checks for the automated 25-case F + kG batch workflow.
-add_executable(isosurface_singularity_batch_tests tests/test_singularity_batch.cpp)
-target_include_directories(isosurface_singularity_batch_tests PRIVATE src)
-add_test(NAME singularity_batch_helpers COMMAND isosurface_singularity_batch_tests)
+# -----------------------------------------------------------------------------
+# Tests and headless diagnostics tools.
+# -----------------------------------------------------------------------------
+if(BUILD_TESTING)
+  add_subdirectory(tests)
+endif()
