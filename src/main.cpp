@@ -11,6 +11,7 @@
 #include "IsosurfaceSlices.h"
 #include "SingularityConvergence.h"
 #include "SingularityResearch.h"
+#include "SingularityBatch.h"
 #include "ProjectPaths.h"
 
 #include <GL/glew.h>
@@ -25,6 +26,9 @@
 #include <cmath>
 #include <chrono>
 #include <exception>
+#include <atomic>
+#include <future>
+#include <memory>
 #include <stdexcept>
 #include <filesystem>
 #include <iostream>
@@ -52,6 +56,13 @@ public:
                       "%s", "x*x*x - k*y");
         std::snprintf(slice_output_directory_.data(), slice_output_directory_.size(),
                       "%s", "isosurface_slices");
+        std::snprintf(batch_f_expression_buffer_.data(), batch_f_expression_buffer_.size(),
+                      "%s", "x^3+y^3+z^3");
+        std::snprintf(batch_g_expressions_buffer_.data(), batch_g_expressions_buffer_.size(),
+                      "%s", "1\nx\ny\nz\nx+y\nx+z\ny+z\nx-y\nx-z\ny-z\n"
+                             "x^2\ny^2\nz^2\nx*y\nx*z\ny*z\n"
+                             "x^2+y^2+z^2\nx*y+y*z+z*x\nx^3\ny^3\nz^3\n"
+                             "x*y*z\nx^2*y\nx^2*z\ny^2*z\n");
         ast_ = parseExpression(expression_buffer_.data());
         add_help_item("Left drag", "Orbit the isosurface");
         add_help_item("Click grid vertex", "Select a sample vertex and inspect its F value");
@@ -116,6 +127,7 @@ protected:
 
     void process_imgui() override
     {
+        poll_batch_job();
         // Open the adapted startup setup as a modal in the PMP viewer's
         // standard ImGui panel. Unlike the remeshing project, this program
         // generates an isosurface directly and therefore has no input mesh.
@@ -389,6 +401,12 @@ protected:
             ImGui::SameLine();
             if (ImGui::SmallButton("Analyze surface convergence"))
                 run_singularity_convergence();
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Batch 25 F + kG tests..."))
+            {
+                batch_setup_open_ = true;
+                batch_popup_requested_ = false;
+            }
 
             // Select the actual k samples for the geometric convergence experiment.
             ImGui::SetNextItemWidth(92.0f);
@@ -448,6 +466,7 @@ protected:
 
         draw_slice_gallery();
         draw_setup_popup();
+        draw_batch_experiment_popup();
     }
 
     void draw(const std::string& draw_mode) override
@@ -693,6 +712,21 @@ private:
     iso_convergence::Analysis convergence_analysis_{};
     std::string convergence_message_;
     // END THESIS CONVERGENCE ANALYSIS MEMBERS
+    // BEGIN AUTOMATED F_PLUS_KG BATCH WORKFLOW
+    std::array<char, 512> batch_f_expression_buffer_{};
+    std::array<char, 16384> batch_g_expressions_buffer_{};
+    double batch_k_min_ = -0.1;
+    double batch_k_max_ = 0.1;
+    int batch_k_sample_count_ = 25;
+    int batch_mesh_resolution_ = 48;
+    double batch_domain_half_extent_ = 1.0;
+    bool batch_setup_open_ = false;
+    bool batch_popup_requested_ = false;
+    bool batch_running_ = false;
+    std::string batch_status_;
+    std::shared_ptr<std::atomic<int>> batch_progress_;
+    std::future<iso_batch::BatchResult> batch_future_;
+    // END AUTOMATED F_PLUS_KG BATCH WORKFLOW
 
     pmp::Shader overlay_shader_;
     // Many Core Profile drivers (not just macOS: this also reproduces on
@@ -1258,6 +1292,145 @@ private:
             ImGui::TextWrapped("%s", convergence_message_.c_str());
     }
     // END THESIS CONVERGENCE ANALYSIS METHODS
+    // BEGIN AUTOMATED F_PLUS_KG BATCH WORKFLOW
+    std::filesystem::path batch_experiments_directory() const
+    {
+#ifdef ISOSURFACE_PROJECT_ROOT
+        return std::filesystem::path(ISOSURFACE_PROJECT_ROOT) / "experiments";
+#else
+        return std::filesystem::current_path() / "experiments";
+#endif
+    }
+
+    void start_batch_experiment()
+    {
+        if (batch_running_)
+            return;
+        try
+        {
+            iso_batch::Settings settings;
+            settings.fExpression = iso_batch::trim(batch_f_expression_buffer_.data());
+            settings.gExpressions = iso_batch::parseGExpressions(batch_g_expressions_buffer_.data());
+            settings.kMinimum = batch_k_min_;
+            settings.kMaximum = batch_k_max_;
+            settings.kSampleCount = batch_k_sample_count_;
+            settings.resolution = batch_mesh_resolution_;
+            settings.halfExtent = batch_domain_half_extent_;
+            settings.probe = {static_cast<double>(point_of_interest_[0]),
+                              static_cast<double>(point_of_interest_[1]),
+                              static_cast<double>(point_of_interest_[2])};
+            iso_batch::validateSettings(settings);
+
+            batch_progress_ = std::make_shared<std::atomic<int>>(0);
+            const auto progress = batch_progress_;
+            const auto outputRoot = batch_experiments_directory();
+            batch_running_ = true;
+            batch_status_ = "Running 25 F + kG analyses...";
+            batch_future_ = std::async(std::launch::async,
+                [settings = std::move(settings), outputRoot, progress]() mutable
+                {
+                    return iso_batch::runBatch(settings, outputRoot, progress.get());
+                });
+        }
+        catch (const std::exception& error)
+        {
+            batch_running_ = false;
+            batch_status_ = std::string("Batch setup error: ") + error.what();
+        }
+    }
+
+    void poll_batch_job()
+    {
+        if (!batch_running_ || !batch_future_.valid())
+            return;
+        if (batch_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready)
+            return;
+        try
+        {
+            const iso_batch::BatchResult result = batch_future_.get();
+            batch_status_ = iso_batch::summarize(result);
+        }
+        catch (const std::exception& error)
+        {
+            batch_status_ = std::string("Batch execution failed: ") + error.what();
+        }
+        batch_running_ = false;
+    }
+
+    void draw_batch_experiment_popup()
+    {
+        const char* popupName = "Batch F + kG experiments";
+        if (batch_setup_open_ && !batch_popup_requested_)
+        {
+            ImGui::OpenPopup(popupName);
+            batch_popup_requested_ = true;
+        }
+        if (!batch_setup_open_)
+            batch_popup_requested_ = false;
+
+        ImGui::SetNextWindowSize(ImVec2(650.0f, 760.0f), ImGuiCond_FirstUseEver);
+        if (!ImGui::BeginPopupModal(popupName, &batch_setup_open_, ImGuiWindowFlags_None))
+            return;
+
+        ImGui::TextWrapped("Enter F(x,y,z) and exactly 25 perturbations G_i(x,y,z). "
+                           "Each run analyses F + k G_i over the same k range and grid.");
+        ImGui::Separator();
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::InputText("F(x,y,z)", batch_f_expression_buffer_.data(),
+                         batch_f_expression_buffer_.size());
+        ImGui::TextDisabled("Do not put k in F or G. The program constructs F + k*G automatically.");
+        ImGui::Text("G expressions: one expression per line (exactly 25 non-empty lines)");
+        ImGui::InputTextMultiline("##BatchGExpressions", batch_g_expressions_buffer_.data(),
+                                  batch_g_expressions_buffer_.size(), ImVec2(-1.0f, 235.0f),
+                                  ImGuiInputTextFlags_AllowTabInput);
+
+        ImGui::SetNextItemWidth(145.0f);
+        ImGui::InputDouble("k minimum", &batch_k_min_, 0.0, 0.0, "%.10g");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(145.0f);
+        ImGui::InputDouble("k maximum", &batch_k_max_, 0.0, 0.0, "%.10g");
+        ImGui::SetNextItemWidth(145.0f);
+        ImGui::InputInt("Number of k samples", &batch_k_sample_count_);
+        batch_k_sample_count_ = std::clamp(batch_k_sample_count_, 3, 101);
+        ImGui::SetNextItemWidth(145.0f);
+        ImGui::InputInt("Mesh resolution (cells/axis)", &batch_mesh_resolution_);
+        batch_mesh_resolution_ = std::clamp(batch_mesh_resolution_, 16, 110);
+        ImGui::SetNextItemWidth(145.0f);
+        ImGui::InputDouble("Domain half-extent", &batch_domain_half_extent_, 0.0, 0.0, "%.8g");
+        ImGui::Text("P used for all 25 runs: (% .6g, % .6g, % .6g)",
+                    point_of_interest_[0], point_of_interest_[1], point_of_interest_[2]);
+        ImGui::TextDisabled("Resolution is limited to 16-110 cells per axis by the current extractor; "
+                            "k samples are limited to 3-101.");
+        ImGui::Separator();
+
+        if (batch_running_)
+        {
+            const int completed = batch_progress_ ? batch_progress_->load(std::memory_order_relaxed) : 0;
+            ImGui::Text("Progress: %d / 25", completed);
+            ImGui::ProgressBar(static_cast<float>(completed) / 25.0f, ImVec2(-1.0f, 0.0f));
+            ImGui::TextWrapped("The 25 runs are executing in the background. The viewer remains responsive.");
+        }
+        else
+        {
+            if (ImGui::Button("Run all 25 tests", ImVec2(180.0f, 0.0f)))
+                start_batch_experiment();
+            ImGui::SameLine();
+            if (ImGui::Button("Close", ImVec2(100.0f, 0.0f)))
+            {
+                batch_setup_open_ = false;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        if (!batch_status_.empty())
+        {
+            ImGui::Separator();
+            ImGui::TextWrapped("%s", batch_status_.c_str());
+        }
+        ImGui::EndPopup();
+    }
+    // END AUTOMATED F_PLUS_KG BATCH WORKFLOW
+
     void get_cell_corners(GridCorner corners[8]) const
     {
         static constexpr const char* names[8] = {"C000", "C100", "C110", "C010", "C001", "C101", "C111", "C011"};

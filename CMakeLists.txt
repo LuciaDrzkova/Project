@@ -110,3 +110,8 @@ add_test(NAME singularity_convergence_regression COMMAND isosurface_singularity_
 add_executable(isosurface_singularity_research_tests tests/test_singularity_research.cpp)
 target_include_directories(isosurface_singularity_research_tests PRIVATE src)
 add_test(NAME singularity_research_analysis COMMAND isosurface_singularity_research_tests)
+
+# Parser and naming checks for the automated 25-case F + kG batch workflow.
+add_executable(isosurface_singularity_batch_tests tests/test_singularity_batch.cpp)
+target_include_directories(isosurface_singularity_batch_tests PRIVATE src)
+add_test(NAME singularity_batch_helpers COMMAND isosurface_singularity_batch_tests)
