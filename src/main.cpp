@@ -1426,53 +1426,32 @@ private:
                             const char* apply_button_label,
                             std::string& error_message)
     {
-        // Do not reformat the text while the user is actively editing it.
-        if (!editing)
-            std::snprintf(buffer.data(), buffer.size(), "%.9g", static_cast<double>(k_));
+        // Edit k directly. This avoids refreshing a separate text buffer
+        // while the user is typing into it.
+        (void)buffer;
+        (void)editing;
+        (void)apply_button_label;
 
         ImGui::SetNextItemWidth(130.0f);
-        const bool enter_submitted = ImGui::InputText(
-            label, buffer.data(), buffer.size(),
-            ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific);
-        const bool field_active = ImGui::IsItemActive();
-        const bool deactivated_after_edit = ImGui::IsItemDeactivatedAfterEdit();
-        ImGui::SameLine();
-        const bool apply_clicked = ImGui::Button(apply_button_label);
-        editing = field_active;
+        const bool changed = ImGui::InputScalar(
+            label, ImGuiDataType_Float, &k_, nullptr, nullptr, "%.9g",
+            ImGuiInputTextFlags_CharsScientific);
 
-        if (enter_submitted || deactivated_after_edit || apply_clicked)
+        if (changed)
         {
-            char* end = nullptr;
-            const double parsed = std::strtod(buffer.data(), &end);
-            while (end != nullptr && *end != '\0' && std::isspace(static_cast<unsigned char>(*end)))
-                ++end;
-            const bool valid = end != buffer.data() && end != nullptr && *end == '\0' &&
-                std::isfinite(parsed) &&
-                parsed <= static_cast<double>(std::numeric_limits<float>::max()) &&
-                parsed >= -static_cast<double>(std::numeric_limits<float>::max());
-
-            if (!valid)
-            {
-                error_message = "Invalid k. Enter a finite number, e.g. -0.001 or 1e-4.";
-                std::snprintf(buffer.data(), buffer.size(), "%.9g", static_cast<double>(k_));
-                editing = false;
-                return false;
-            }
-
-            const float new_k = static_cast<float>(parsed);
-            const bool changed = new_k != k_;
-            k_ = new_k;
-            std::snprintf(buffer.data(), buffer.size(), "%.9g", static_cast<double>(k_));
-            editing = false;
             error_message.clear();
-            return changed;
+            if (!std::isfinite(k_))
+            {
+                k_ = 0.0f;
+                error_message = "Invalid k. Enter a finite number, e.g. -0.001 or 1e-4.";
+            }
         }
 
         if (!error_message.empty())
-            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s", error_message.c_str());
-        return false;
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f),
+                               "%s", error_message.c_str());
+        return changed;
     }
-
     void draw_slice_gallery()
     {
         if (!show_slice_gallery_ || !slice_result_available_ ||
