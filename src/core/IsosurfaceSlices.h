@@ -52,6 +52,7 @@ struct GridSample
 
 struct Result
 {
+    std::string expression; // F(x,y,z,k) as entered when the slices were extracted
     int axis = 2; // 0=X (YZ planes), 1=Y (XZ planes), 2=Z (XY planes)
     int resolution = 0;
     double k = 0.0;
@@ -170,6 +171,7 @@ inline Result extract_and_export(const Node* ast,
     Result result;
     result.axis = axis;
     result.resolution = resolution;
+    result.expression = expression;
     result.k = k;
     result.half_extent = half_extent;
     result.spacing = (2.0 * half_extent) / resolution;

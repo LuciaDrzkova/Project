@@ -203,6 +203,9 @@ void IsosurfaceViewer::draw_slice_gallery()
             if (slice_result_available_) slice_data_stale_ = true;
         }
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Create snapshot..."))
+        open_snapshot_dialog();
     if (slice_data_stale_)
         ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.18f, 1.0f),
             "STALE SNAPSHOT: slices are at k = %.17g; viewer k = %.9g. Re-extract to update contours and CSV.",
@@ -419,7 +422,146 @@ void IsosurfaceViewer::draw_slice_gallery()
     }
     ImGui::EndChild();
     ImGui::TextDisabled("Label stride controls clutter on dense grids. Hover any node or click it for exact coordinates and full-precision F; CSV preserves all values.");
+    draw_snapshot_popup();
     ImGui::End();
+}
+
+namespace {
+constexpr const char* kSnapshotPopup = "Slice snapshot";
+} // namespace
+
+// Prepares the dialog: keeps a previous selection if it still fits the current
+// result, otherwise preselects the gallery's selected slice with its two
+// neighbours and a 3x3 node window around the selected grid node.
+void IsosurfaceViewer::open_snapshot_dialog()
+{
+    const int resolution = std::max(1, slice_result_data_.resolution);
+    if (snapshot_slice_selected_.size() != slice_result_data_.plane_count)
+    {
+        snapshot_slice_selected_.assign(slice_result_data_.plane_count, 0);
+        const int first = std::clamp(slice_selected_slice_ - 1, 0, std::max(0, resolution - 2));
+        for (int s = first; s < first + 3 && s < static_cast<int>(snapshot_slice_selected_.size()); ++s)
+            snapshot_slice_selected_[static_cast<std::size_t>(s)] = 1;
+    }
+    auto window_around = [resolution](int center) {
+        const int lo = std::clamp(center - 1, 0, std::max(0, resolution - 2));
+        return std::array<int, 2>{lo, std::min(resolution, lo + 2)};
+    };
+    auto fits = [resolution](const std::array<int, 2>& range) {
+        return range[0] >= 0 && range[0] < range[1] && range[1] <= resolution;
+    };
+    if (!fits(snapshot_u_range_)) snapshot_u_range_ = window_around(slice_selected_iu_);
+    if (!fits(snapshot_v_range_)) snapshot_v_range_ = window_around(slice_selected_iv_);
+    snapshot_status_.clear();
+    ImGui::OpenPopup(kSnapshotPopup);
+}
+
+iso_slices::SnapshotRequest IsosurfaceViewer::snapshot_request() const
+{
+    iso_slices::SnapshotRequest request;
+    for (std::size_t s = 0; s < snapshot_slice_selected_.size(); ++s)
+        if (snapshot_slice_selected_[s]) request.slices.push_back(static_cast<int>(s));
+    request.iu_min = snapshot_u_range_[0];
+    request.iu_max = snapshot_u_range_[1];
+    request.iv_min = snapshot_v_range_[0];
+    request.iv_max = snapshot_v_range_[1];
+    return request;
+}
+
+void IsosurfaceViewer::draw_snapshot_popup()
+{
+    if (!ImGui::BeginPopupModal(kSnapshotPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+
+    const iso_slices::Result& result = slice_result_data_;
+    const int resolution = result.resolution;
+    const std::array<int, 2> uv = iso_slices::in_plane_axes(result.axis);
+    const char* u_name = iso_slices::axis_name(uv[0]);
+    const char* v_name = iso_slices::axis_name(uv[1]);
+
+    ImGui::TextWrapped("Choose at least %zu slices and a rectangle of grid nodes. The snapshot shows the F value "
+                       "of every node in the rectangle on each selected slice, with the corner coordinates.",
+                       iso_slices::kMinSnapshotSlices);
+    ImGui::Text("Data: k = %.9g, %s-normal slices, resolution %d", result.k,
+                iso_slices::axis_name(result.axis), resolution);
+    if (slice_data_stale_)
+        ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.18f, 1.0f),
+                           "The viewer k changed since extraction; the snapshot uses the extracted slices.");
+    ImGui::Separator();
+
+    // Slice selection: a 4-column grid of checkboxes.
+    const std::size_t selected = static_cast<std::size_t>(
+        std::count(snapshot_slice_selected_.begin(), snapshot_slice_selected_.end(), 1));
+    ImGui::Text("Slices: %zu selected", selected);
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Clear"))
+        std::fill(snapshot_slice_selected_.begin(), snapshot_slice_selected_.end(), 0);
+    ImGui::BeginChild("SnapshotSlices", ImVec2(560.0f, 160.0f), true);
+    if (ImGui::BeginTable("SnapshotSliceTable", 4))
+    {
+        for (std::size_t s = 0; s < snapshot_slice_selected_.size(); ++s)
+        {
+            ImGui::TableNextColumn();
+            bool checked = snapshot_slice_selected_[s] != 0;
+            char label[64];
+            std::snprintf(label, sizeof(label), "Slice %zu (%s=%.4g)", s + 1, iso_slices::axis_name(result.axis),
+                          gridCoordinate(static_cast<int>(s), resolution, result.half_extent));
+            if (ImGui::Checkbox(label, &checked))
+                snapshot_slice_selected_[s] = checked ? 1 : 0;
+        }
+        ImGui::EndTable();
+    }
+    ImGui::EndChild();
+
+    // Grid window: inclusive index ranges along the in-plane axes.
+    char u_label[48], v_label[48];
+    std::snprintf(u_label, sizeof(u_label), "u = %s grid index", u_name);
+    std::snprintf(v_label, sizeof(v_label), "v = %s grid index", v_name);
+    ImGui::SetNextItemWidth(300.0f);
+    ImGui::DragIntRange2(u_label, &snapshot_u_range_[0], &snapshot_u_range_[1], 0.1f, 0, resolution,
+                         "from %d", "to %d");
+    ImGui::SetNextItemWidth(300.0f);
+    ImGui::DragIntRange2(v_label, &snapshot_v_range_[0], &snapshot_v_range_[1], 0.1f, 0, resolution,
+                         "from %d", "to %d");
+    auto coordinate = [&](int index) { return gridCoordinate(index, resolution, result.half_extent); };
+    ImGui::Text("Bottom-left: %s = %.6g, %s = %.6g    Top-right: %s = %.6g, %s = %.6g",
+                u_name, coordinate(snapshot_u_range_[0]), v_name, coordinate(snapshot_v_range_[0]),
+                u_name, coordinate(snapshot_u_range_[1]), v_name, coordinate(snapshot_v_range_[1]));
+    ImGui::Text("%d x %d nodes per slice", snapshot_u_range_[1] - snapshot_u_range_[0] + 1,
+                snapshot_v_range_[1] - snapshot_v_range_[0] + 1);
+
+    const iso_slices::SnapshotRequest request = snapshot_request();
+    const std::string problem = iso_slices::validate_snapshot(result, request);
+    const std::filesystem::path directory = project_output_directory("snapshots");
+    ImGui::Separator();
+    if (problem.empty())
+        ImGui::TextWrapped("Saves %s.svg and .csv to %s", iso_slices::snapshot_base_name(result, request).c_str(),
+                           directory.string().c_str());
+    else
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "%s", problem.c_str());
+
+    ImGui::BeginDisabled(!problem.empty());
+    if (ImGui::Button("Save snapshot", ImVec2(160.0f, 0.0f)))
+    {
+        try
+        {
+            const iso_slices::SnapshotFiles files = iso_slices::write_snapshot(result, request, directory);
+            snapshot_status_ = "Saved " + files.svg.filename().string() + " and " +
+                files.csv.filename().string() + " in " + directory.string();
+        }
+        catch (const std::exception& error)
+        {
+            snapshot_status_ = std::string("Snapshot failed: ") + error.what();
+        }
+        runtime_message_ = snapshot_status_;
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Close", ImVec2(100.0f, 0.0f)))
+        ImGui::CloseCurrentPopup();
+    if (!snapshot_status_.empty())
+        ImGui::TextWrapped("%s", snapshot_status_.c_str());
+    ImGui::EndPopup();
 }
 
 } // namespace iso_app

@@ -35,6 +35,10 @@ diagnostics tools (no pmp download, no OpenGL needed).
   optional gradient glyphs, sampling grid and cell-corner inspector.
 - **2D slices**: grid-aligned cross-sections with marching squares, a slice
   gallery and full-precision CSV export.
+- **Slice snapshots**: in the gallery, **Create snapshot...** picks three or
+  more slices and a rectangle of grid nodes. It saves
+  `snapshots/<F>_slices_<list>_u<a>-<b>_v<c>-<d>.svg` (node isovalues,
+  contour, corner coordinates) plus a `.csv` with the same nodes.
 - **Convergence analysis**: for a range of `k`, measures the point-to-mesh
   distance, local gradients, residuals and Hausdorff-type distances to the
   `k = 0` reference. It also runs Taylor-jet, isolation and stationary-point
@@ -55,6 +59,8 @@ src/
 │   ├── Dual3.h            forward-mode AD number (value + exact gradient)
 │   ├── Isosurface.h       marching cubes: sampling, zero tie-break, extraction
 │   ├── IsosurfaceSlices.h grid-aligned 2D slices + CSV export
+│   ├── SliceSnapshot.h    grid-window snapshot of selected slices (SVG + CSV)
+│   ├── FileNames.h        file-system-safe names from expressions
 │   ├── SurfaceCatalogue.h the 34 parameterised families (single source of truth)
 │   ├── Grid.h             lattice coordinates shared by every component
 │   ├── Geometry.h         points, point–triangle distance, KD-tree, BVH

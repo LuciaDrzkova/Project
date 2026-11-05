@@ -17,13 +17,14 @@
 
 namespace iso_app {
 
-// Generated results live in <project>/experiments; source stays in src/ and tests/.
-std::filesystem::path IsosurfaceViewer::experiments_directory()
+// Generated output lives next to the sources (experiments/, snapshots/),
+// independent of the working directory the viewer was started from.
+std::filesystem::path IsosurfaceViewer::project_output_directory(const char* name)
 {
 #ifdef ISOSURFACE_PROJECT_ROOT
-    return std::filesystem::path(ISOSURFACE_PROJECT_ROOT) / "experiments";
+    return std::filesystem::path(ISOSURFACE_PROJECT_ROOT) / name;
 #else
-    return std::filesystem::current_path() / "experiments";
+    return std::filesystem::current_path() / name;
 #endif
 }
 
@@ -50,7 +51,7 @@ void IsosurfaceViewer::start_convergence_job()
         convergence_message_ = "Running convergence analysis (" +
             std::to_string(options.kValues.size()) + " k samples at resolution " +
             std::to_string(options.resolution) + ")...";
-        convergence_job_.start([options = std::move(options), root = experiments_directory()]() {
+        convergence_job_.start([options = std::move(options), root = project_output_directory("experiments")]() {
             return run_convergence_job(options, root);
         });
     }
@@ -183,7 +184,7 @@ void IsosurfaceViewer::start_batch_experiment()
 
         batch_progress_ = std::make_shared<std::atomic<int>>(0);
         const auto progress = batch_progress_;
-        const auto outputRoot = experiments_directory();
+        const auto outputRoot = project_output_directory("experiments");
         batch_status_ = "Running 25 F + kG analyses...";
         batch_job_.start([settings = std::move(settings), outputRoot, progress]() {
             return iso_batch::runBatch(settings, outputRoot, progress.get());

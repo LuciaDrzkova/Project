@@ -14,6 +14,7 @@ cmake_install.cmake
 
 # Generated results (viewer and headless tools)
 /experiments/
+/snapshots/
 /isosurface_slices/
 /singularity_sweep_artifacts/
 /singularity_diagnostics_artifacts/

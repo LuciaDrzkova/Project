@@ -5,6 +5,7 @@
 // one after another; within a family every k sample is processed in parallel.
 
 #include "SingularityResearch.h"
+#include "core/FileNames.h"
 
 #include <algorithm>
 #include <atomic>
@@ -87,42 +88,9 @@ inline std::string composeFamilyExpression(const std::string& fExpression,
 
 inline bool containsKVariable(const Node* node) { return exprContains(node, Node::VAR_K); }
 
-// Convert an expression into a portable, readable folder component. The
-// original unsanitized expressions remain recorded in the CSV metadata.
-inline std::string safeFolderComponent(const std::string& expression,
-                                       std::size_t maxLength = 64) {
-    std::string result;
-    result.reserve(std::min(expression.size(), maxLength));
-    bool previousUnderscore = false;
-    for (unsigned char c : expression) {
-        char out = '_';
-        if (std::isalnum(c) || c == '_' || c == '-' || c == '+' ||
-            c == '^' || c == '(' || c == ')' || c == '.') {
-            out = static_cast<char>(c);
-        } else if (c == '*') {
-            out = 'x'; // multiplication remains visually distinct in folder names
-        } else if (std::isspace(c)) {
-            out = '_';
-        }
-        if (out == '_') {
-            if (previousUnderscore) continue;
-            previousUnderscore = true;
-        } else {
-            previousUnderscore = false;
-        }
-        result.push_back(out);
-        if (result.size() >= maxLength) break;
-    }
-    while (!result.empty() && (result.back() == '.' || result.back() == ' '))
-        result.pop_back();
-    while (!result.empty() && result.front() == '.')
-        result.erase(result.begin());
-    if (result.empty()) result = "expression";
-    if (result == "CON" || result == "PRN" || result == "AUX" ||
-        result == "NUL" || result == "COM1" || result == "LPT1") {
-        result = "expr_" + result;
-    }
-    return result;
+// Portable folder name for an expression (see iso_files::safeFileComponent).
+inline std::string safeFolderComponent(const std::string& expression, std::size_t maxLength = 64) {
+    return iso_files::safeFileComponent(expression, maxLength);
 }
 
 // Readable, expression-based run folder; name collisions get _02, _03, ... suffixes.

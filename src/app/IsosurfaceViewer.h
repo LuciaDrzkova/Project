@@ -6,7 +6,7 @@
 // Implementation is split by concern:
 //   IsosurfaceViewer.cpp  frame loop, surface extraction, picking, 3D overlays
 //   ViewerPanels.cpp      main ImGui control panel and the setup dialog
-//   SliceGallery.cpp      2D slice extraction state and the slice gallery
+//   SliceGallery.cpp      2D slice extraction state, slice gallery, snapshots
 //   AnalysisJobs.cpp      background convergence analysis and the F+kG batch
 
 #include "BackgroundJob.h"
@@ -17,6 +17,7 @@
 #include "core/Expr.h"
 #include "core/Isosurface.h"
 #include "core/IsosurfaceSlices.h"
+#include "core/SliceSnapshot.h"
 
 #include <pmp/visualization/mesh_viewer.h>
 
@@ -111,9 +112,13 @@ private:
     void build_slice_reference_geometry(std::vector<OverlayVertex>& plane,
                                         std::vector<OverlayVertex>& selected_point) const;
     void draw_slice_gallery();
+    void open_snapshot_dialog();
+    void draw_snapshot_popup();
+    iso_slices::SnapshotRequest snapshot_request() const;
 
     // ---- AnalysisJobs.cpp: background analyses ------------------------------
-    static std::filesystem::path experiments_directory();
+    // <project>/<name> for generated output (experiments/, snapshots/).
+    static std::filesystem::path project_output_directory(const char* name);
     void start_convergence_job();
     static ConvergenceJobResult run_convergence_job(const iso_convergence::Options& options,
                                                     const std::filesystem::path& experiment_root);
@@ -195,6 +200,11 @@ private:
     bool show_slice_selected_point_in_3d_ = true;
     int slice_value_label_stride_ = 1;
     int slice_label_resolution_ = -1;
+    // Snapshot dialog: per-slice selection flags and the inclusive grid window.
+    std::vector<unsigned char> snapshot_slice_selected_;
+    std::array<int, 2> snapshot_u_range_{0, 0};
+    std::array<int, 2> snapshot_v_range_{0, 0};
+    std::string snapshot_status_;
 
     // ---- Convergence analysis --------------------------------------------------
     double convergence_k_min_ = -0.1;

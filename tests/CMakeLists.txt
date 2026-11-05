@@ -53,3 +53,9 @@ add_test(NAME deformation_criteria COMMAND isosurface_deformation_criteria_tests
 
 isolab_add_program(isosurface_unfolding_criterion_tests test_unfolding_criterion.cpp)
 add_test(NAME unfolding_criterion COMMAND isosurface_unfolding_criterion_tests)
+
+# Slice snapshot (rectangular grid window over selected slices -> SVG + CSV).
+isolab_add_program(isosurface_slice_snapshot_tests test_slice_snapshot.cpp)
+add_test(NAME slice_snapshot
+         COMMAND isosurface_slice_snapshot_tests
+                 --out ${CMAKE_BINARY_DIR}/slice_snapshot_test_artifacts)
