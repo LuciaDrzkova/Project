@@ -39,7 +39,9 @@ struct Options {
     Point3 probe{0.0, 0.0, 0.0};
     int resolution = 80;
     double halfExtent = 1.0;
-    double localRadius = 0.4;
+    // Half-size of the local box Q = P + [-a, a]^3 in which all local
+    // quantities are measured.
+    double localHalfSize = 0.4;
     // Backwards-compatible mode: analyse both signs of each positive magnitude.
     // Used when kValues is empty.
     std::vector<double> magnitudes{1e-1, 3e-2, 1e-2, 3e-3, 1e-3, 3e-4};
@@ -96,7 +98,7 @@ struct Sample {
     std::size_t skippedDegenerateTriangles = 0;
     double meshBuildMilliseconds = std::numeric_limits<double>::quiet_NaN();
     double meshMaximumGradientMagnitude = std::numeric_limits<double>::quiet_NaN();
-    bool hasSurfaceWithinLocalRadius = false;
+    bool hasSurfaceInLocalBox = false;
     double distanceProbeToMesh = std::numeric_limits<double>::infinity();
     double minimumGradientLocal = std::numeric_limits<double>::quiet_NaN();
     double maxAbsFieldResidualLocal = std::numeric_limits<double>::quiet_NaN();
@@ -141,7 +143,7 @@ struct RunMetadata {
     int gridResolutionCellsPerAxis = 0;
     int gridSamplesPerAxis = 0;
     double gridSpacingX = 0.0, gridSpacingY = 0.0, gridSpacingZ = 0.0;
-    double localRadius = 0.0;
+    double localHalfSize = 0.0;
 
     double kMinimum = std::numeric_limits<double>::quiet_NaN();
     double kMaximum = std::numeric_limits<double>::quiet_NaN();
@@ -170,10 +172,10 @@ struct RunMetadata {
     std::string meshRepresentation = "non-indexed triangle soup; three SurfaceVertex records per triangle; counts are triangle-corner occurrences, not welded unique vertices";
     std::string pointToMeshDistance = "minimum Euclidean point-to-triangle distance over all mesh triangles";
     std::string localHausdorffDistance = "sampled-vertex proxy: directed nearest-neighbour distances between local mesh vertices using a KD-tree; symmetric value is the maximum of the two directed values; not exact triangle-surface Hausdorff distance";
-    std::string localVertexSelection = "mesh vertices whose Euclidean distance from the probe point is <= local_radius";
-    std::string domainBoundaryTreatment = "mesh clipped to the axis-aligned cube; local comparison uses vertices inside the probe-centred ball";
+    std::string localVertexSelection = "mesh vertices inside the probe-centred box P + [-a,a]^3, a = local_box_half_size (maximum-norm distance <= a)";
+    std::string domainBoundaryTreatment = "mesh clipped to the axis-aligned cube; local comparison uses vertices inside the probe-centred box";
 
-    std::string referenceMeshSettings = "k=0 reference mesh uses exactly the same grid resolution, domain, extractor, and local radius as perturbed meshes";
+    std::string referenceMeshSettings = "k=0 reference mesh uses exactly the same grid resolution, domain, extractor, and local box as perturbed meshes";
     std::string numericTypes = "field evaluation and distances: double; stored mesh position and gradMag fields: float";
     double doubleEpsilon = std::numeric_limits<double>::epsilon();
     double floatEpsilon = std::numeric_limits<float>::epsilon();
@@ -432,7 +434,7 @@ struct MeshPoint {
     double absFieldResidual = std::numeric_limits<double>::quiet_NaN();
 };
 
-// Mesh vertices inside the probe ball. `points` holds each welded vertex once
+// Mesh vertices inside the probe box. `points` holds each welded vertex once
 // (duplicated soup corners cannot change a min/max or a nearest-neighbour
 // distance); `cornerCount` keeps the documented corner-occurrence count.
 struct LocalPatch {
@@ -445,15 +447,14 @@ inline Point3 vertexPoint(const SurfaceVertex& v) {
 }
 
 inline LocalPatch localPatch(const Node* ast, const IsosurfaceResult& mesh, double k,
-                             const Point3& center, double radius) {
+                             const Point3& center, double halfSize) {
     LocalPatch out;
-    const double r2 = radius * radius;
     const bool indexed = mesh.vertexIds.size() == mesh.vertices.size();
     std::vector<char> seen(indexed ? mesh.uniqueVertexCount : 0, 0);
     for (std::size_t corner = 0; corner < mesh.vertices.size(); ++corner) {
         const SurfaceVertex& v = mesh.vertices[corner];
         const Point3 p = vertexPoint(v);
-        if (normSquared(p - center) > r2) continue;
+        if (iso_geometry::maxNormDistance(p, center) > halfSize) continue;
         ++out.cornerCount;
         if (indexed) {
             char& flag = seen[mesh.vertexIds[corner]];
@@ -517,8 +518,8 @@ inline MetricTrend trendFor(const std::vector<Sample>& samples, int sign, bool u
         if (s.k == 0.0) continue; // k=0 is the reference fibre, not a one-sided sample.
         if ((s.k > 0.0 ? 1 : -1) != sign) continue;
         // A finite distance to a mesh elsewhere in the plotting domain is not
-        // evidence of local approach if the nearest point is outside the local ball.
-        if (!useHausdorff && !s.hasSurfaceWithinLocalRadius) continue;
+        // evidence of local approach if the surface does not meet the local box.
+        if (!useHausdorff && !s.hasSurfaceInLocalBox) continue;
         sideSamples.push_back(&s);
     }
     // Fit against decreasing |k| irrespective of how the user ordered the range.
@@ -637,7 +638,7 @@ inline RunMetadata makeMetadata(const Node* ast, const Options& options,
     m.gridResolutionCellsPerAxis = options.resolution;
     m.gridSamplesPerAxis = options.resolution + 1;
     m.gridSpacingX = m.gridSpacingY = m.gridSpacingZ = gridSpacing;
-    m.localRadius = options.localRadius;
+    m.localHalfSize = options.localHalfSize;
     m.kSampleCount = options.kValues.size();
     if (!options.kValues.empty()) {
         const auto bounds = std::minmax_element(options.kValues.begin(), options.kValues.end());
@@ -704,8 +705,8 @@ inline RunMetadata makeMetadata(const Node* ast, const Options& options,
 inline std::vector<double> resolveKValues(Options& options) {
     if (!(options.halfExtent > 0.0) || !std::isfinite(options.halfExtent))
         throw std::invalid_argument("halfExtent must be finite and positive.");
-    if (!(options.localRadius > 0.0) || !std::isfinite(options.localRadius))
-        throw std::invalid_argument("localRadius must be finite and positive.");
+    if (!(options.localHalfSize > 0.0) || !std::isfinite(options.localHalfSize))
+        throw std::invalid_argument("localHalfSize must be finite and positive.");
     std::vector<double> kValues;
     if (!options.kValues.empty()) {
         // Preserve the range order for the results table and CSV, removing only
@@ -748,7 +749,7 @@ using MeshVisitor = std::function<void(std::size_t sampleIndex, double k, const 
 inline Analysis analyze(const Node* ast, const Options& inputOptions, const MeshVisitor& visitMesh = {}) {
     if (!ast) throw std::invalid_argument("Convergence analysis needs a parsed expression.");
     Options options = inputOptions;
-    options.resolution = std::clamp(options.resolution, 8, 110);
+    options.resolution = std::clamp(options.resolution, 8, Isosurface::kMaxAnalysisResolution);
     options.kValues = detail::resolveKValues(options);
 
     Analysis out;
@@ -758,7 +759,7 @@ inline Analysis analyze(const Node* ast, const Options& inputOptions, const Mesh
 
     const IsosurfaceResult reference = Isosurface::build(ast, 0.0, options.resolution, options.halfExtent);
     const detail::LocalPatch referenceLocal =
-        detail::localPatch(ast, reference, 0.0, options.probe, options.localRadius);
+        detail::localPatch(ast, reference, 0.0, options.probe, options.localHalfSize);
     const iso_geometry::KdTree referenceTree = detail::makeTree(referenceLocal);
     out.metadata = detail::makeMetadata(ast, options, out.probeAtZero, reference,
                                         referenceLocal.cornerCount, out.gridSpacing);
@@ -770,7 +771,7 @@ inline Analysis analyze(const Node* ast, const Options& inputOptions, const Mesh
     iso_parallel::parallelFor(options.kValues.size(), [&](std::size_t index) {
         const double k = options.kValues[index];
         const IsosurfaceResult mesh = Isosurface::build(ast, k, options.resolution, options.halfExtent);
-        const detail::LocalPatch local = detail::localPatch(ast, mesh, k, options.probe, options.localRadius);
+        const detail::LocalPatch local = detail::localPatch(ast, mesh, k, options.probe, options.localHalfSize);
 
         Sample& row = out.samples[index];
         row.k = k;
@@ -782,8 +783,7 @@ inline Analysis analyze(const Node* ast, const Options& inputOptions, const Mesh
         row.meshBuildMilliseconds = mesh.buildMillis;
         row.meshMaximumGradientMagnitude = mesh.maxGradMag;
         row.distanceProbeToMesh = detail::pointMeshDistance(mesh, options.probe);
-        row.hasSurfaceWithinLocalRadius = std::isfinite(row.distanceProbeToMesh) &&
-                                          row.distanceProbeToMesh <= options.localRadius;
+        row.hasSurfaceInLocalBox = !local.points.empty();
         double maxResidual = 0.0;
         bool sawFiniteResidual = false;
         for (const detail::MeshPoint& p : local.points) {
@@ -829,7 +829,7 @@ inline bool writeCsv(const std::string& path, const Analysis& a, std::string* er
     const RunMetadata& m = a.metadata;
     out << "sample_index,k,abs_k,sign,total_vertices,local_vertices,triangles,exact_zero_grid_samples,"
            "skipped_degenerate_triangles,mesh_build_milliseconds,mesh_maximum_gradient_magnitude,"
-           "has_surface_within_local_radius,distance_probe_to_mesh,min_gradient_local,max_abs_field_residual_local,mesh_to_reference,"
+           "has_surface_in_local_box,distance_probe_to_mesh,min_gradient_local,max_abs_field_residual_local,mesh_to_reference,"
            "reference_to_mesh,symmetric_local_hausdorff,geometry_comparable,"
            "metadata_timestamp_utc,metadata_family_expression,metadata_F_expression,metadata_G_expression,"
            "metadata_k_affine_status,metadata_degree_F,metadata_degree_G,metadata_degree_status,"
@@ -838,7 +838,7 @@ inline bool writeCsv(const std::string& path, const Analysis& a, std::string* er
            "metadata_domain_x_min,metadata_domain_x_max,metadata_domain_y_min,metadata_domain_y_max,"
            "metadata_domain_z_min,metadata_domain_z_max,metadata_grid_resolution_cells_per_axis,"
            "metadata_grid_samples_per_axis,metadata_grid_spacing_x,metadata_grid_spacing_y,metadata_grid_spacing_z,"
-           "metadata_local_radius,metadata_k_min,metadata_k_max,metadata_k_sample_count,"
+           "metadata_local_box_half_size,metadata_k_min,metadata_k_max,metadata_k_sample_count,"
            "metadata_negative_k_sample_count,metadata_zero_k_sample_count,metadata_positive_k_sample_count,"
            "metadata_k_values_uniformly_spaced,metadata_k_spacing_if_uniform,metadata_reference_k,metadata_reference_total_vertices,metadata_reference_local_vertices,"
            "metadata_reference_triangles,metadata_reference_exact_zero_grid_samples,"
@@ -866,7 +866,7 @@ inline bool writeCsv(const std::string& path, const Analysis& a, std::string* er
          << number(m.domainZMin) << ',' << number(m.domainZMax) << ','
          << m.gridResolutionCellsPerAxis << ',' << m.gridSamplesPerAxis << ','
          << number(m.gridSpacingX) << ',' << number(m.gridSpacingY) << ','
-         << number(m.gridSpacingZ) << ',' << number(m.localRadius) << ','
+         << number(m.gridSpacingZ) << ',' << number(m.localHalfSize) << ','
          << number(m.kMinimum) << ',' << number(m.kMaximum) << ',' << m.kSampleCount << ','
          << m.negativeKSampleCount << ',' << m.zeroKSampleCount << ',' << m.positiveKSampleCount << ','
          << (m.kValuesUniformlySpaced ? 1 : 0) << ',' << number(m.kSpacingIfUniform) << ','
@@ -895,7 +895,7 @@ inline bool writeCsv(const std::string& path, const Analysis& a, std::string* er
             << s.totalVertices << ',' << s.localVertices << ',' << s.triangles << ','
             << s.exactZeroGridSamples << ',' << s.skippedDegenerateTriangles << ','
             << number(s.meshBuildMilliseconds) << ',' << number(s.meshMaximumGradientMagnitude) << ','
-            << (s.hasSurfaceWithinLocalRadius ? 1 : 0) << ','
+            << (s.hasSurfaceInLocalBox ? 1 : 0) << ','
             << number(s.distanceProbeToMesh) << ',' << number(s.minimumGradientLocal) << ','
             << number(s.maxAbsFieldResidualLocal) << ',' << number(s.meshToReference) << ','
             << number(s.referenceToMesh) << ',' << number(s.symmetricHausdorff) << ','

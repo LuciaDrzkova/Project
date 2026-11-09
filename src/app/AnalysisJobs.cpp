@@ -1,16 +1,18 @@
 // Long-running analyses executed in the background: the convergence +
-// research analysis of the current family and the 25-run F + kG batch.
+// research analysis of the current family, its k -> 0 convergence
+// classification, and the 25-run F + kG batch.
 
 #include "IsosurfaceViewer.h"
 
 #include "ProjectPaths.h"
-#include "analysis/SingularityResearch.h"
+#include "analysis/ConvergenceClassifier.h"
 #include "core/CsvFormat.h"
 
 #include <imgui.h>
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -28,6 +30,46 @@ std::filesystem::path IsosurfaceViewer::project_output_directory(const char* nam
 #endif
 }
 
+// Convergence settings shared by the analysis buttons: P, the viewer domain,
+// the selected k samples and the convergence mesh resolution.
+iso_convergence::Options IsosurfaceViewer::convergence_options_from_ui(bool log_spaced_k) const
+{
+    iso_convergence::Options options;
+    options.probe = {static_cast<double>(point_of_interest_[0]),
+                     static_cast<double>(point_of_interest_[1]),
+                     static_cast<double>(point_of_interest_[2])};
+    options.resolution = std::clamp(convergence_resolution_, 16, kMaxGridResolution);
+    options.halfExtent = static_cast<double>(half_extent_);
+    options.localHalfSize = 0.45 * options.halfExtent;
+    options.kValues = log_spaced_k
+        ? iso_classify::makeSymmetricLogKValues(std::max(std::fabs(convergence_k_min_), std::fabs(convergence_k_max_)),
+                                                std::clamp((convergence_sample_count_ + 1) / 2, 3, 50), 3.0)
+        : iso_convergence::makeLinearKValues(convergence_k_min_, convergence_k_max_, convergence_sample_count_);
+    options.familyExpression = last_good_expression_;
+    return options;
+}
+
+// <root>/<prefix>_<microseconds>[_n]: a fresh directory per run.
+std::filesystem::path IsosurfaceViewer::create_run_directory(const std::filesystem::path& root, const std::string& prefix)
+{
+    std::filesystem::create_directories(root);
+    const auto stamp = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    std::filesystem::path directory = root / (prefix + "_" + std::to_string(stamp));
+    for (std::size_t suffix = 1; std::filesystem::exists(directory); ++suffix)
+        directory = root / (prefix + "_" + std::to_string(stamp) + "_" + std::to_string(suffix));
+    std::filesystem::create_directories(directory);
+    return directory;
+}
+
+// All CSV reports of one analysis (see iso_research::writeFamilyCsvs).
+void IsosurfaceViewer::write_family_csvs(const std::filesystem::path& directory, const iso_research::FamilyAnalysis& family)
+{
+    std::string write_error;
+    if (!iso_research::writeFamilyCsvs(directory.string(), family, &write_error))
+        throw std::runtime_error(write_error);
+}
+
 // Runs the convergence + research analysis in the background. The worker
 // parses its own copy of the expression and receives every setting by
 // value, so the viewer stays responsive and may keep editing meanwhile.
@@ -37,17 +79,7 @@ void IsosurfaceViewer::start_convergence_job()
         return;
     try
     {
-        iso_convergence::Options options;
-        options.probe = {static_cast<double>(point_of_interest_[0]),
-                         static_cast<double>(point_of_interest_[1]),
-                         static_cast<double>(point_of_interest_[2])};
-        options.resolution = std::clamp(convergence_resolution_, 16, 110);
-        options.halfExtent = static_cast<double>(half_extent_);
-        options.localRadius = 0.45 * options.halfExtent;
-        options.kValues = iso_convergence::makeLinearKValues(
-            convergence_k_min_, convergence_k_max_, convergence_sample_count_);
-        options.familyExpression = last_good_expression_;
-
+        iso_convergence::Options options = convergence_options_from_ui(false);
         convergence_message_ = "Running convergence analysis (" +
             std::to_string(options.kValues.size()) + " k samples at resolution " +
             std::to_string(options.resolution) + ")...";
@@ -66,25 +98,8 @@ IsosurfaceViewer::ConvergenceJobResult IsosurfaceViewer::run_convergence_job(
 {
     const NodePtr ast = parseExpression(options.familyExpression);
     iso_research::FamilyAnalysis family = iso_research::analyzeFamily(ast.get(), options, 3);
-
-    // Each run gets its own timestamped directory.
-    std::filesystem::create_directories(experiment_root);
-    const auto stamp = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    std::filesystem::path run_directory = experiment_root / ("run_" + std::to_string(stamp));
-    for (std::size_t suffix = 1; std::filesystem::exists(run_directory); ++suffix)
-        run_directory = experiment_root / ("run_" + std::to_string(stamp) + "_" + std::to_string(suffix));
-    std::filesystem::create_directories(run_directory);
-
-    std::string write_error;
-    auto path = [&run_directory](const char* filename) { return (run_directory / filename).string(); };
-    auto require = [&write_error](bool ok) {
-        if (!ok) throw std::runtime_error(write_error);
-    };
-    require(iso_convergence::writeCsv(path("singularity_convergence.csv"), family.convergence, &write_error));
-    require(iso_research::writeTaylorCsv(path("singularity_taylor.csv"), family.research, &write_error));
-    require(iso_research::writeCriticalPointsCsv(path("singularity_critical_points.csv"), family.research, &write_error));
-    require(iso_research::writeTriangleGeometryCsv(path("singularity_triangle_geometry.csv"), family.research, &write_error));
+    const std::filesystem::path run_directory = create_run_directory(experiment_root, "run");
+    write_family_csvs(run_directory, family);
 
     ConvergenceJobResult result;
     result.message = "Saved four CSV files in " + run_directory.string() + ".\n" + family.research.summary +
@@ -161,6 +176,113 @@ void IsosurfaceViewer::draw_singularity_convergence_report()
     }
     if (!convergence_message_.empty())
         ImGui::TextWrapped("%s", convergence_message_.c_str());
+}
+
+// ----- k -> 0 convergence classification ---------------------------------------
+
+void IsosurfaceViewer::start_classification_job()
+{
+    if (classification_job_.running())
+        return;
+    try
+    {
+        iso_convergence::Options options = convergence_options_from_ui(classification_log_spaced_k_);
+        classification_message_ = "Classifying convergence (" + std::to_string(options.kValues.size()) +
+            " k samples at resolution " + std::to_string(options.resolution) + ")...";
+        classification_job_.start([options = std::move(options), root = project_output_directory("experiments")]() {
+            return run_classification_job(options, root);
+        });
+    }
+    catch (const std::exception& error)
+    {
+        classification_message_ = std::string("Classification failed: ") + error.what();
+    }
+}
+
+IsosurfaceViewer::ClassificationJobResult IsosurfaceViewer::run_classification_job(
+    const iso_convergence::Options& options, const std::filesystem::path& experiment_root)
+{
+    const NodePtr ast = parseExpression(options.familyExpression);
+    const iso_research::FamilyAnalysis family = iso_research::analyzeFamily(ast.get(), options, 3);
+    ClassificationJobResult result;
+    result.classification = iso_classify::classify(ast.get(), family);
+
+    const std::filesystem::path run_directory = create_run_directory(experiment_root, "classify");
+    write_family_csvs(run_directory, family);
+    std::string write_error;
+    if (!iso_classify::writeCsv((run_directory / "convergence_classification.csv").string(),
+                                result.classification, &write_error))
+        throw std::runtime_error(write_error);
+    result.message = "Saved convergence_classification.csv and the four analysis CSVs in " +
+        run_directory.string() + ".";
+    return result;
+}
+
+void IsosurfaceViewer::poll_classification_job()
+{
+    classification_job_.poll(
+        [this](ClassificationJobResult result) {
+            classification_ = std::move(result.classification);
+            classification_available_ = true;
+            classification_message_ = std::move(result.message);
+        },
+        [this](const std::string& error) {
+            classification_available_ = false;
+            classification_message_ = "Classification failed: " + error;
+        });
+}
+
+void IsosurfaceViewer::draw_classification_report()
+{
+    poll_classification_job();
+    if (classification_job_.running() || !classification_available_)
+    {
+        if (!classification_message_.empty())
+            ImGui::TextWrapped("%s", classification_message_.c_str());
+        return;
+    }
+    const iso_classify::Classification& c = classification_;
+    if (!ImGui::CollapsingHeader("Convergence classification (k -> 0)", ImGuiTreeNodeFlags_DefaultOpen))
+        return;
+    ImGui::TextWrapped("%s; prediction %s: d_H ~ %s", iso_classify::toString(c.point), c.prediction.regime.c_str(),
+                       iso_classify::detail::predictionText(c.prediction).c_str());
+    if (!c.prediction.principalPart.empty())
+        ImGui::TextWrapped("Principal part of F at P: %s, weights (%.3g, %.3g, %.3g)", c.prediction.principalPart.c_str(),
+                           c.prediction.weights[0], c.prediction.weights[1], c.prediction.weights[2]);
+    if (c.milnorNumber >= 0)
+        ImGui::TextWrapped("Milnor number %d, Tjurina number %d (basis %s); essential part of G: %s",
+                           c.milnorNumber, c.tjurinaNumber, c.tjurinaBasis.c_str(), c.essentialCoordinates.c_str());
+    ImGui::TextDisabled("Local box P + [-a, a]^3 with a = %.3g; grid spacing h = %.3g. %s", c.localHalfSize,
+                        c.gridSpacing,
+                        c.negative.exactDistances ? "Distances measured on the exact surfaces."
+                                                  : "Distances measured between meshes, fitted where h/2 <= d_H <= 0.6 a.");
+    if (ImGui::BeginTable("ClassificationTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                                                       ImGuiTableFlags_SizingStretchProp))
+    {
+        ImGui::TableSetupColumn("side");
+        ImGui::TableSetupColumn("surface");
+        ImGui::TableSetupColumn("alpha");
+        ImGui::TableSetupColumn("singular points");
+        ImGui::TableSetupColumn("count, rate");
+        ImGui::TableHeadersRow();
+        for (const iso_classify::SideResult* s : {&c.negative, &c.positive})
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn(); ImGui::TextUnformatted(s->sign < 0 ? "k < 0" : "k > 0");
+            ImGui::TableNextColumn(); ImGui::TextUnformatted(iso_classify::toString(s->surface));
+            ImGui::TableNextColumn();
+            ImGui::Text("%s +/- %s", iso_csv::shortNumber(s->hausdorff.exponent).c_str(),
+                        iso_csv::shortNumber(s->hausdorff.ciHigh - s->hausdorff.exponent).c_str());
+            ImGui::TableNextColumn(); ImGui::TextUnformatted(iso_classify::toString(s->singular));
+            ImGui::TableNextColumn();
+            ImGui::Text("%zu, %s", s->maxSingularPoints, iso_csv::shortNumber(s->singularDistance.exponent).c_str());
+        }
+        ImGui::EndTable();
+    }
+    ImGui::TextWrapped("%s", c.negative.verdict.c_str());
+    ImGui::TextWrapped("%s", c.positive.verdict.c_str());
+    if (!classification_message_.empty())
+        ImGui::TextWrapped("%s", classification_message_.c_str());
 }
 
 void IsosurfaceViewer::start_batch_experiment()
@@ -240,13 +362,12 @@ void IsosurfaceViewer::draw_batch_experiment_popup()
     batch_k_sample_count_ = std::clamp(batch_k_sample_count_, 3, 101);
     ImGui::SetNextItemWidth(145.0f);
     ImGui::InputInt("Mesh resolution (cells/axis)", &batch_mesh_resolution_);
-    batch_mesh_resolution_ = std::clamp(batch_mesh_resolution_, 16, 110);
+    batch_mesh_resolution_ = std::clamp(batch_mesh_resolution_, 16, Isosurface::kMaxAnalysisResolution);
     ImGui::SetNextItemWidth(145.0f);
     ImGui::InputDouble("Domain half-extent", &batch_domain_half_extent_, 0.0, 0.0, "%.8g");
     ImGui::Text("P used for all 25 runs: (% .6g, % .6g, % .6g)",
                 point_of_interest_[0], point_of_interest_[1], point_of_interest_[2]);
-    ImGui::TextDisabled("Resolution is limited to 16-110 cells per axis by the current extractor; "
-                        "k samples are limited to 3-101.");
+    ImGui::TextDisabled("Resolution: 16-%d cells per axis; k samples: 3-101.", Isosurface::kMaxAnalysisResolution);
     ImGui::Separator();
 
     if (batch_job_.running())

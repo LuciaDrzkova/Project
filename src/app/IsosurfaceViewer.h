@@ -7,11 +7,13 @@
 //   IsosurfaceViewer.cpp  frame loop, surface extraction, picking, 3D overlays
 //   ViewerPanels.cpp      main ImGui control panel and the setup dialog
 //   SliceGallery.cpp      2D slice extraction state, slice gallery, snapshots
-//   AnalysisJobs.cpp      background convergence analysis and the F+kG batch
+//   AnalysisJobs.cpp      background convergence analysis, k -> 0 classification
+//                         and the F+kG batch
 
 #include "BackgroundJob.h"
 #include "OverlayRenderer.h"
 
+#include "analysis/ConvergenceClassifier.h"
 #include "analysis/SingularityBatch.h"
 #include "analysis/SingularityConvergence.h"
 #include "core/Expr.h"
@@ -69,7 +71,13 @@ private:
         std::string message;
     };
 
-    static constexpr int kMaxGridResolution = 110;
+    struct ClassificationJobResult
+    {
+        iso_classify::Classification classification;
+        std::string message;
+    };
+
+    static constexpr int kMaxGridResolution = 256;
     static constexpr int kActiveFramesAfterEvent = 10;
 
     // ---- IsosurfaceViewer.cpp: frame loop, surface, picking, overlays -------
@@ -119,11 +127,19 @@ private:
     // ---- AnalysisJobs.cpp: background analyses ------------------------------
     // <project>/<name> for generated output (experiments/, snapshots/).
     static std::filesystem::path project_output_directory(const char* name);
+    iso_convergence::Options convergence_options_from_ui(bool log_spaced_k) const;
+    static std::filesystem::path create_run_directory(const std::filesystem::path& root, const std::string& prefix);
+    static void write_family_csvs(const std::filesystem::path& directory, const iso_research::FamilyAnalysis& family);
     void start_convergence_job();
     static ConvergenceJobResult run_convergence_job(const iso_convergence::Options& options,
                                                     const std::filesystem::path& experiment_root);
     void poll_convergence_job();
     void draw_singularity_convergence_report();
+    void start_classification_job();
+    static ClassificationJobResult run_classification_job(const iso_convergence::Options& options,
+                                                          const std::filesystem::path& experiment_root);
+    void poll_classification_job();
+    void draw_classification_report();
     void start_batch_experiment();
     void poll_batch_job();
     void draw_batch_experiment_popup();
@@ -215,6 +231,13 @@ private:
     iso_convergence::Analysis convergence_analysis_{};
     std::string convergence_message_;
     BackgroundJob<ConvergenceJobResult> convergence_job_;
+
+    // ---- k -> 0 convergence classification --------------------------------------
+    bool classification_log_spaced_k_ = false; // off: use the selected k samples exactly
+    bool classification_available_ = false;
+    iso_classify::Classification classification_{};
+    std::string classification_message_;
+    BackgroundJob<ClassificationJobResult> classification_job_;
 
     // ---- F + kG batch ----------------------------------------------------------
     std::array<char, 512> batch_f_expression_buffer_{};

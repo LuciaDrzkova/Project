@@ -63,7 +63,7 @@ void IsosurfaceViewer::throttle_when_idle()
 
     // Background jobs need frames so their completion is noticed and shown.
     const bool busy = mesh_dirty_ || sweep_dirty_ || batch_job_.running() ||
-                      convergence_job_.running() || mouse_held;
+                      convergence_job_.running() || classification_job_.running() || mouse_held;
     if (busy)
     {
         active_frames_left_ = kActiveFramesAfterEvent;

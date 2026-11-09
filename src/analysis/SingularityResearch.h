@@ -506,7 +506,7 @@ inline bool solve3x3(const std::array<std::array<double, 3>, 3>& a, const Point3
     return std::isfinite(x.x) && std::isfinite(x.y) && std::isfinite(x.z);
 }
 
-// Damped Newton on grad F_k = 0 inside the ball |x - center| <= radius.
+// Damped Newton on grad F_k = 0 inside the box |x - center|_inf <= radius.
 inline bool newtonStationary(const Node* ast, double k, const Point3& center, double radius,
                              Point3 seed, Point3& root, int& iterations, double& gradResidual) {
     Point3 x = seed;
@@ -528,7 +528,7 @@ inline bool newtonStationary(const Node* ast, double k, const Point3& center, do
         double alpha = 1.0;
         for (int ls = 0; ls < 16; ++ls, alpha *= 0.5) {
             const Point3 candidate = x - delta * alpha;
-            if (distance(candidate, center) > radius) continue;
+            if (iso_geometry::maxNormDistance(candidate, center) > radius) continue;
             const DifferentialData trial = evaluateJet(ast, candidate, k);
             const double trialNorm = gradientNorm(trial.gradient);
             if (std::isfinite(trialNorm) && trial.smooth && trialNorm < gn) {
@@ -601,32 +601,32 @@ inline Point3 surfacePoint(const SurfaceVertex& v) {
     return {static_cast<double>(v.px), static_cast<double>(v.py), static_cast<double>(v.pz)};
 }
 
-// Triangles whose centroid lies within `radius` of `center`.
+// Triangles whose centroid lies in the box of half-size `radius` around `center`.
 inline std::vector<iso_geometry::Triangle> meshTriangles(const IsosurfaceResult& mesh, const Point3& center,
                                                          double radius) {
     std::vector<iso_geometry::Triangle> out;
     for (std::size_t i = 0; i + 2 < mesh.vertices.size(); i += 3) {
         iso_geometry::Triangle t = iso_geometry::makeTriangle(
             surfacePoint(mesh.vertices[i]), surfacePoint(mesh.vertices[i + 1]), surfacePoint(mesh.vertices[i + 2]));
-        if (distance(t.centroid, center) <= radius) out.push_back(t);
+        if (iso_geometry::maxNormDistance(t.centroid, center) <= radius) out.push_back(t);
     }
     return out;
 }
 
 // Barycentric samples (n subdivisions per edge) on triangles near `center`.
 inline std::vector<Point3> triangleInteriorSamples(const IsosurfaceResult& mesh, const Point3& center,
-                                                   double sampleRadius, int subdivisions = 3) {
+                                                   double sampleHalfSize, int subdivisions = 3) {
     std::vector<Point3> out;
     const int n = std::max(1, subdivisions);
     for (std::size_t i = 0; i + 2 < mesh.vertices.size(); i += 3) {
         const Point3 a = surfacePoint(mesh.vertices[i]);
         const Point3 b = surfacePoint(mesh.vertices[i + 1]);
         const Point3 c = surfacePoint(mesh.vertices[i + 2]);
-        if (distance((a + b + c) * (1.0 / 3.0), center) > sampleRadius + 1e-12) continue;
+        if (iso_geometry::maxNormDistance((a + b + c) * (1.0 / 3.0), center) > sampleHalfSize + 1e-12) continue;
         for (int u = 0; u <= n; ++u) for (int v = 0; v <= n - u; ++v) {
             const double wa = static_cast<double>(u) / n, wb = static_cast<double>(v) / n, wc = 1.0 - wa - wb;
             const Point3 q = a * wa + b * wb + c * wc;
-            if (distance(q, center) <= sampleRadius) out.push_back(q);
+            if (iso_geometry::maxNormDistance(q, center) <= sampleHalfSize) out.push_back(q);
         }
     }
     return out;
@@ -640,7 +640,7 @@ struct GeometrySample {
     double meshToReferenceRms = std::numeric_limits<double>::quiet_NaN();
     double referenceToMeshRms = std::numeric_limits<double>::quiet_NaN();
     std::size_t sampleCountPerturbed = 0, sampleCountReference = 0;
-    double interiorSamplingRadius = 0.0;
+    double interiorSamplingHalfSize = 0.0;
     bool comparable = false;
 };
 
@@ -663,14 +663,14 @@ inline GeometrySample compareMeshes(double k, const IsosurfaceResult& mesh, cons
                                     const Point3& center, double radius, double gridSpacing, int subdivisions = 3) {
     GeometrySample out;
     out.k = k;
-    // Erode the requested ball by two grid widths. This avoids most of the
+    // Erode the requested box by two grid widths. This avoids most of the
     // artificial mismatch caused by abruptly clipping triangle patches at the
-    // ball boundary. The actual and interior radii are both recorded.
-    out.interiorSamplingRadius = std::max(0.0, radius - 2.0 * gridSpacing);
+    // box boundary. The requested and interior half-sizes are both recorded.
+    out.interiorSamplingHalfSize = std::max(0.0, radius - 2.0 * gridSpacing);
     const iso_geometry::TriangleBvh meshBvh(meshTriangles(mesh, center, radius + 2.0 * gridSpacing));
     const iso_geometry::TriangleBvh refBvh(meshTriangles(reference, center, radius + 2.0 * gridSpacing));
-    const auto meshSamples = triangleInteriorSamples(mesh, center, out.interiorSamplingRadius, subdivisions);
-    const auto refSamples = triangleInteriorSamples(reference, center, out.interiorSamplingRadius, subdivisions);
+    const auto meshSamples = triangleInteriorSamples(mesh, center, out.interiorSamplingHalfSize, subdivisions);
+    const auto refSamples = triangleInteriorSamples(reference, center, out.interiorSamplingHalfSize, subdivisions);
     out.sampleCountPerturbed = meshSamples.size();
     out.sampleCountReference = refSamples.size();
     if (meshSamples.empty() || refSamples.empty() || meshBvh.empty() || refBvh.empty()) return out;
@@ -691,7 +691,7 @@ struct TaylorRow { std::string name; DifferentialData data; int firstNonzeroOrde
 
 struct ResearchAnalysis {
     Point3 probe{};
-    double requestedLocalRadius = 0.0;
+    double requestedLocalHalfSize = 0.0;
     std::string affineStatus = "NOT_VERIFIED_AFFINE_IN_K";
     int gridResolution = 0;
     double halfExtent = 0.0, gridSpacing = 0.0;
@@ -715,7 +715,7 @@ inline ResearchAnalysis analyze(const Node* familyAst, const iso_convergence::Op
         throw std::invalid_argument("Precomputed geometry does not match the k samples.");
     ResearchAnalysis out;
     out.probe = options.probe;
-    out.requestedLocalRadius = options.localRadius;
+    out.requestedLocalHalfSize = options.localHalfSize;
     out.gridResolution = options.resolution;
     out.halfExtent = options.halfExtent;
     out.gridSpacing = 2.0 * options.halfExtent / options.resolution;
@@ -734,9 +734,9 @@ inline ResearchAnalysis analyze(const Node* familyAst, const iso_convergence::Op
         out.fTaylor.firstNonzeroOrder = firstNonzeroJetOrder(out.fTaylor.data.taylor);
         out.gTaylor.data = evaluateJet(gAst.get(), options.probe, 0.0);
         out.gTaylor.firstNonzeroOrder = firstNonzeroJetOrder(out.gTaylor.data.taylor);
-        out.isolation = assessReferenceSingularity(fAst.get(), options.probe, options.localRadius);
+        out.isolation = assessReferenceSingularity(fAst.get(), options.probe, options.localHalfSize);
     }
-    out.criticalPoints = findCriticalPoints(familyAst, options.kValues, options.probe, options.localRadius);
+    out.criticalPoints = findCriticalPoints(familyAst, options.kValues, options.probe, options.localHalfSize);
 
     if (precomputedGeometry) {
         out.geometry = *precomputedGeometry;
@@ -746,12 +746,12 @@ inline ResearchAnalysis analyze(const Node* familyAst, const iso_convergence::Op
         iso_parallel::parallelFor(options.kValues.size(), [&](std::size_t i) {
             const double k = options.kValues[i];
             if (k == 0.0) {
-                out.geometry[i] = compareMeshes(k, reference, reference, options.probe, options.localRadius,
+                out.geometry[i] = compareMeshes(k, reference, reference, options.probe, options.localHalfSize,
                                                 out.gridSpacing, triangleSubdivisions);
                 return;
             }
             const IsosurfaceResult mesh = Isosurface::build(familyAst, k, options.resolution, options.halfExtent);
-            out.geometry[i] = compareMeshes(k, mesh, reference, options.probe, options.localRadius,
+            out.geometry[i] = compareMeshes(k, mesh, reference, options.probe, options.localHalfSize,
                                             out.gridSpacing, triangleSubdivisions);
         });
     }
@@ -770,45 +770,6 @@ inline ResearchAnalysis analyze(const Node* familyAst, const iso_convergence::Op
            << " numerical on-zero-level singular candidates. Triangle-sampled geometry comparisons: "
            << out.geometry.size() << " k samples. All root-search labels and mesh distances are numerical diagnostics, not certified completeness or exact Hausdorff distances.";
     out.summary = report.str();
-    return out;
-}
-
-// ----- Combined convergence + research run --------------------------------
-
-struct FamilyAnalysis {
-    iso_convergence::Analysis convergence;
-    ResearchAnalysis research;
-};
-
-// Runs iso_convergence::analyze and the research analysis together. Each k is
-// extracted exactly once (in parallel); the research triangle-geometry
-// comparison is computed from the same mesh while it is still alive.
-inline FamilyAnalysis analyzeFamily(const Node* familyAst, const iso_convergence::Options& inputOptions,
-                                    int triangleSubdivisions = 3) {
-    iso_convergence::Options options = inputOptions;
-    options.resolution = std::clamp(options.resolution, 8, 110); // what both analyses extract at
-    const double gridSpacing = 2.0 * options.halfExtent / options.resolution;
-
-    FamilyAnalysis out;
-    std::vector<GeometrySample> geometry(std::max<std::size_t>(options.kValues.size(),
-                                                               options.magnitudes.size() * 2));
-    out.convergence = iso_convergence::analyze(familyAst, options,
-        [&](std::size_t index, double k, const IsosurfaceResult& mesh, const IsosurfaceResult& reference) {
-            geometry[index] = compareMeshes(k, mesh, reference, options.probe, options.localRadius,
-                                            gridSpacing, triangleSubdivisions);
-        });
-
-    // Research reports one row per requested k (duplicates included); the
-    // convergence run analysed each distinct k once.
-    const std::vector<double>& analysed = out.convergence.options.kValues;
-    if (options.kValues.empty()) options.kValues = analysed;
-    std::vector<GeometrySample> perRequestedK;
-    perRequestedK.reserve(options.kValues.size());
-    for (double k : options.kValues) {
-        const auto it = std::find(analysed.begin(), analysed.end(), k);
-        perRequestedK.push_back(geometry[static_cast<std::size_t>(it - analysed.begin())]);
-    }
-    out.research = analyze(familyAst, options, triangleSubdivisions, &perRequestedK);
     return out;
 }
 
@@ -871,14 +832,14 @@ inline bool writeTriangleGeometryCsv(const std::string& path, const ResearchAnal
     std::ofstream o(path);
     if (!o) { if (error) *error = "Cannot open " + path; return false; }
     o << "k,mesh_to_reference_triangle_sampled_max,reference_to_mesh_triangle_sampled_max,symmetric_triangle_sampled_estimate,"
-         "mesh_to_reference_rms,reference_to_mesh_rms,perturbed_source_samples,reference_source_samples,interior_sampling_radius,comparable,"
-         "distance_method,requested_local_radius,grid_resolution_cells_per_axis,grid_spacing,domain_half_extent,triangle_subdivisions\n";
+         "mesh_to_reference_rms,reference_to_mesh_rms,perturbed_source_samples,reference_source_samples,interior_sampling_half_size,comparable,"
+         "distance_method,local_box_half_size,grid_resolution_cells_per_axis,grid_spacing,domain_half_extent,triangle_subdivisions\n";
     const std::string method = quote("barycentric samples on source triangles; exact point-to-target-triangle distance accelerated by BVH; sampled estimate, not continuous Hausdorff");
     for (const GeometrySample& g : a.geometry)
         o << number(g.k) << ',' << number(g.meshToReference) << ',' << number(g.referenceToMesh) << ','
           << number(g.symmetricEstimate) << ',' << number(g.meshToReferenceRms) << ',' << number(g.referenceToMeshRms) << ','
-          << g.sampleCountPerturbed << ',' << g.sampleCountReference << ',' << number(g.interiorSamplingRadius) << ','
-          << (g.comparable ? 1 : 0) << ',' << method << ',' << number(a.requestedLocalRadius) << ','
+          << g.sampleCountPerturbed << ',' << g.sampleCountReference << ',' << number(g.interiorSamplingHalfSize) << ','
+          << (g.comparable ? 1 : 0) << ',' << method << ',' << number(a.requestedLocalHalfSize) << ','
           << a.gridResolution << ',' << number(a.gridSpacing) << ',' << number(a.halfExtent) << ','
           << a.triangleSubdivisions << "\n";
     return static_cast<bool>(o);

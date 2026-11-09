@@ -39,7 +39,7 @@ void testIndefiniteCubicApproachesFromBothSides() {
     options.probe = {0,0,0};
     options.resolution = 64;
     options.halfExtent = 0.6;
-    options.localRadius = 0.42;
+    options.localHalfSize = 0.42;
     options.magnitudes = {0.09, 0.04, 0.01, 0.0025};
     const auto a = iso_convergence::analyze(ast.get(), options);
     check(a.samples.size() == 8, "both signs are analysed for every magnitude");
@@ -56,7 +56,7 @@ void testIndefiniteCubicApproachesFromBothSides() {
         int count = 0;
         for (const auto& s : a.samples) {
             if ((s.k < 0.0 ? -1 : 1) != sign) continue;
-            check(s.hasSurfaceWithinLocalRadius,
+            check(s.hasSurfaceInLocalBox,
                   "indefinite cubic should have mesh near the origin at k=" + std::to_string(s.k));
             if (std::isfinite(s.distanceProbeToMesh)) {
                 // Values are coarse-grid estimates; only assert a broad trend.
@@ -84,15 +84,15 @@ void testDefiniteCubicIsOneSidedInSmallBox() {
     options.probe = {0,0,0};
     options.resolution = 64;
     options.halfExtent = 0.6;
-    options.localRadius = 0.42;
+    options.localHalfSize = 0.42;
     options.magnitudes = {0.09, 0.04, 0.01};
     const auto a = iso_convergence::analyze(ast.get(), options);
     for (const auto& s : a.samples) {
         if (s.k > 0.0) {
-            check(!s.hasSurfaceWithinLocalRadius,
+            check(!s.hasSurfaceInLocalBox,
                   "positive k should have no local real surface for the definite cubic");
         } else {
-            check(s.hasSurfaceWithinLocalRadius,
+            check(s.hasSurfaceInLocalBox,
                   "negative k should create a local real surface for the definite cubic");
         }
     }
@@ -111,7 +111,7 @@ void testSelectedRangeAndCount() {
     options.probe = {0,0,0};
     options.resolution = 24;
     options.halfExtent = 0.6;
-    options.localRadius = 0.4;
+    options.localHalfSize = 0.4;
     options.kValues = values;
     const auto a = iso_convergence::analyze(ast.get(), options);
     check(a.samples.size() == 5, "analysis extracts exactly the selected number of k samples");
@@ -141,7 +141,7 @@ void testCsvContainsReproducibilityMetadata() {
     options.probe = {0.125, -0.25, 0.0};
     options.resolution = 16;
     options.halfExtent = 0.8;
-    options.localRadius = 0.3;
+    options.localHalfSize = 0.3;
     options.kValues = {-0.02, 0.0, 0.02};
     options.familyExpression = family;
 
@@ -156,7 +156,7 @@ void testCsvContainsReproducibilityMetadata() {
     check(near(meta.domainXMin, -0.8, 1e-12) && near(meta.domainXMax, 0.8, 1e-12),
           "domain bounds are recorded from the half extent");
     check(near(meta.gridSpacingX, 0.1, 1e-12), "grid spacing is recorded");
-    check(near(meta.localRadius, 0.3, 1e-12), "local comparison radius is recorded");
+    check(near(meta.localHalfSize, 0.3, 1e-12), "local comparison radius is recorded");
     check(near(meta.probe.x, 0.125, 1e-12) && near(meta.probe.y, -0.25, 1e-12),
           "probe coordinates are recorded");
     check(meta.kSampleCount == 3 && meta.negativeKSampleCount == 1 &&
@@ -212,7 +212,7 @@ void testNonAffineFamilyIsNotMisrepresentedAsFPlusKG() {
     iso_convergence::Options options;
     options.resolution = 12;
     options.halfExtent = 0.5;
-    options.localRadius = 0.25;
+    options.localHalfSize = 0.25;
     options.kValues = {-0.1, 0.1};
     options.familyExpression = family;
     const auto analysis = iso_convergence::analyze(ast.get(), options);

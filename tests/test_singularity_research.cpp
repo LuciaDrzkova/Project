@@ -13,7 +13,7 @@ static int failures = 0;
 static iso_convergence::Options optionsFor(const std::vector<double>& ks) {
     iso_convergence::Options o;
     o.probe = {0,0,0}; o.resolution = 16; o.halfExtent = 0.5;
-    o.localRadius = 0.22; o.kValues = ks; o.familyExpression = "test family";
+    o.localHalfSize = 0.22; o.kValues = ks; o.familyExpression = "test family";
     return o;
 }
 static const iso_research::CriticalPoint* nearestForK(const iso_research::ResearchAnalysis& a,double k) {

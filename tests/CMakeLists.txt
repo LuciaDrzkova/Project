@@ -59,3 +59,20 @@ isolab_add_program(isosurface_slice_snapshot_tests test_slice_snapshot.cpp)
 add_test(NAME slice_snapshot
          COMMAND isosurface_slice_snapshot_tests
                  --out ${CMAKE_BINARY_DIR}/slice_snapshot_test_artifacts)
+
+# k -> 0 convergence classification (rates, singular-point behaviour, prediction).
+isolab_add_program(isosurface_convergence_classifier_tests test_convergence_classifier.cpp)
+add_test(NAME convergence_classifier COMMAND isosurface_convergence_classifier_tests)
+
+# Headless classification tool (one F, a list of G): tables for the thesis.
+isolab_add_program(isosurface_convergence_classification classify_families.cpp)
+
+# Local algebra, certified stationary points, exact surface distances, direction sweep.
+isolab_add_program(isosurface_exact_analysis_tests test_exact_analysis.cpp)
+add_test(NAME exact_analysis COMMAND isosurface_exact_analysis_tests)
+
+# Direction sweep of linear perturbations for one F.
+isolab_add_program(isosurface_direction_sweep direction_sweep.cpp)
+
+# Reproduces the complete experiment set of the thesis (chapter 5).
+isolab_add_program(isosurface_thesis_experiments thesis_experiments.cpp)

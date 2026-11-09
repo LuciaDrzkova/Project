@@ -1,10 +1,12 @@
 #pragma once
 
-// Runs a batch of families F(x,y,z) + k G_i(x,y,z), exporting the same four
-// CSV reports as the interactive single-run convergence action. Families run
-// one after another; within a family every k sample is processed in parallel.
+// Runs a batch of families F(x,y,z) + k G_i(x,y,z), exporting the same CSV
+// reports as the interactive single-run convergence action, plus the
+// k -> 0 convergence classification of every run and a summary table.
+// Families run one after another; within a family every k sample is
+// processed in parallel.
 
-#include "SingularityResearch.h"
+#include "ConvergenceClassifier.h"
 #include "core/FileNames.h"
 
 #include <algorithm>
@@ -13,6 +15,7 @@
 #include <cmath>
 #include <cstddef>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
@@ -39,10 +42,13 @@ struct RunReport {
     std::filesystem::path directory;
     bool success = false;
     std::string message;
+    bool classified = false;
+    iso_classify::Classification classification; // k -> 0 convergence classification
 };
 
 struct BatchResult {
     std::filesystem::path fDirectory;
+    std::filesystem::path classificationSummary; // one row per G and side of k = 0
     std::vector<RunReport> runs;
 
     std::size_t successCount() const {
@@ -121,8 +127,9 @@ inline void validateSettings(const Settings& settings) {
         throw std::invalid_argument("k minimum and maximum must be finite, with minimum < maximum.");
     if (settings.kSampleCount < 3 || settings.kSampleCount > 101)
         throw std::invalid_argument("Number of k samples must be between 3 and 101.");
-    if (settings.resolution < 16 || settings.resolution > 110)
-        throw std::invalid_argument("Mesh resolution must be between 16 and 110 cells per axis.");
+    if (settings.resolution < 16 || settings.resolution > Isosurface::kMaxAnalysisResolution)
+        throw std::invalid_argument("Mesh resolution must be between 16 and " +
+                                    std::to_string(Isosurface::kMaxAnalysisResolution) + " cells per axis.");
     if (!(settings.halfExtent > 0.0) || !std::isfinite(settings.halfExtent))
         throw std::invalid_argument("Domain half-extent must be finite and positive.");
     if (!std::isfinite(settings.probe.x) || !std::isfinite(settings.probe.y) ||
@@ -132,6 +139,24 @@ inline void validateSettings(const Settings& settings) {
         if (trim(settings.gExpressions[i]).empty())
             throw std::invalid_argument("G expression " + std::to_string(i + 1) + " is empty.");
     }
+}
+
+// <fDirectory>/classification_summary[_NN].csv: the classification of every
+// successful run of this batch, two rows (k<0, k>0) per G. Never overwrites.
+inline void writeClassificationSummary(BatchResult& result) {
+    if (std::none_of(result.runs.begin(), result.runs.end(), [](const RunReport& r) { return r.classified; }))
+        return;
+    std::filesystem::path path = result.fDirectory / "classification_summary.csv";
+    for (int n = 2; std::filesystem::exists(path); ++n) {
+        std::ostringstream name;
+        name << "classification_summary_" << std::setw(2) << std::setfill('0') << n << ".csv";
+        path = result.fDirectory / name.str();
+    }
+    std::ofstream out(path);
+    out << iso_classify::csvHeader() << '\n';
+    for (const RunReport& run : result.runs)
+        if (run.classified) iso_classify::writeCsvRows(out, run.classification);
+    if (out) result.classificationSummary = path;
 }
 
 inline BatchResult runBatch(const Settings& settings,
@@ -173,14 +198,13 @@ inline BatchResult runBatch(const Settings& settings,
             options.probe = settings.probe;
             options.resolution = settings.resolution;
             options.halfExtent = settings.halfExtent;
-            options.localRadius = 0.45 * settings.halfExtent;
+            options.localHalfSize = 0.45 * settings.halfExtent;
             options.kValues = kValues;
             options.familyExpression = familyExpression;
 
             // One shared, parallel mesh pass feeds both analyses.
             const iso_research::FamilyAnalysis analysis =
                 iso_research::analyzeFamily(familyAst.get(), options, 3);
-            const iso_convergence::Analysis& convergence = analysis.convergence;
             const iso_research::ResearchAnalysis& research = analysis.research;
 
             std::filesystem::create_directories(report.directory);
@@ -188,18 +212,12 @@ inline BatchResult runBatch(const Settings& settings,
             const auto filePath = [&report](const char* name) {
                 return (report.directory / name).string();
             };
-            if (!iso_convergence::writeCsv(
-                    filePath("singularity_convergence.csv"), convergence, &writeError))
-                throw std::runtime_error(writeError.empty() ? "Could not write convergence CSV." : writeError);
-            if (!iso_research::writeTaylorCsv(
-                    filePath("singularity_taylor.csv"), research, &writeError))
-                throw std::runtime_error(writeError.empty() ? "Could not write Taylor CSV." : writeError);
-            if (!iso_research::writeCriticalPointsCsv(
-                    filePath("singularity_critical_points.csv"), research, &writeError))
-                throw std::runtime_error(writeError.empty() ? "Could not write critical-points CSV." : writeError);
-            if (!iso_research::writeTriangleGeometryCsv(
-                    filePath("singularity_triangle_geometry.csv"), research, &writeError))
-                throw std::runtime_error(writeError.empty() ? "Could not write triangle-geometry CSV." : writeError);
+            if (!iso_research::writeFamilyCsvs(report.directory.string(), analysis, &writeError))
+                throw std::runtime_error(writeError.empty() ? "Could not write the CSV reports." : writeError);
+            report.classification = iso_classify::classify(familyAst.get(), analysis);
+            if (!iso_classify::writeCsv(filePath("convergence_classification.csv"), report.classification, &writeError))
+                throw std::runtime_error(writeError.empty() ? "Could not write classification CSV." : writeError);
+            report.classified = true;
 
             report.success = true;
             report.message = research.summary;
@@ -220,6 +238,7 @@ inline BatchResult runBatch(const Settings& settings,
             completedCounter->fetch_add(1, std::memory_order_relaxed);
     }
 
+    writeClassificationSummary(result);
     return result;
 }
 
@@ -227,6 +246,8 @@ inline std::string summarize(const BatchResult& result) {
     std::ostringstream out;
     out << "Batch finished: " << result.successCount() << " of " << result.runs.size()
         << " runs saved successfully.\nOutput: " << result.fDirectory.string();
+    if (!result.classificationSummary.empty())
+        out << "\nConvergence classification of all runs: " << result.classificationSummary.string();
     for (std::size_t i = 0; i < result.runs.size(); ++i) {
         if (!result.runs[i].success) {
             out << "\nG" << (i + 1) << " failed (" << result.runs[i].gExpression

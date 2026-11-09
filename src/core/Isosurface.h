@@ -366,6 +366,9 @@ public:
     // evaluates to ~1e-17): its edge crossings would all collapse onto the
     // node and emit zero-area slivers, exactly like a true zero.
     static constexpr double kNumericalZeroTolerance = 1e-10;
+    // Largest grid resolution accepted by the analyses (cells per axis). The
+    // extractor itself has no limit; 512^3 cells need about 1 GB of samples.
+    static constexpr int kMaxAnalysisResolution = 512;
     // Below this many samples, threading costs more than it saves.
     static constexpr std::size_t kParallelSampleThreshold = 32768;
 

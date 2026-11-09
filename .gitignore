@@ -25,6 +25,8 @@ singularity_results/quick/diagnostic_meshes/
 mesh_to_mesh_interpolation_results/res_24
 mesh_to_mesh_interpolation_results/res_32
 mesh_to_mesh_interpolation_results/res_48
+/Thesis_01
+/experiments_thesis
 
 # Local-only thesis experiment helpers (intentionally not committed)
 /install_experiments.py

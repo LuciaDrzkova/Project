@@ -112,7 +112,7 @@ void IsosurfaceViewer::draw_sampling_panel()
     if (ImGui::CollapsingHeader("Sampling grid", ImGuiTreeNodeFlags_DefaultOpen))
     {
         bool resolution_changed = ImGui::SliderInt(
-            "Grid resolution (cells/axis)", &grid_resolution_, 1, 110);
+            "Grid resolution (cells/axis)", &grid_resolution_, 1, kMaxGridResolution);
         bool extent_changed = ImGui::SliderFloat(
             "Domain half-extent", &half_extent_, 0.2f, 3.0f, "%.2f");
         bool gamma_changed = ImGui::SliderFloat(
@@ -327,6 +327,15 @@ void IsosurfaceViewer::draw_gradient_panel()
             batch_setup_open_ = true;
             batch_popup_requested_ = false;
         }
+        // Same k selection as below; decides whether and how S_k -> S_0 near P.
+        if (ImGui::SmallButton("Classify convergence (k -> 0)"))
+            start_classification_job();
+        ImGui::SameLine();
+        ImGui::Checkbox("log-spaced |k|", &classification_log_spaced_k_);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Off: exactly the selected k samples (as for the analysis above).\n"
+                              "On: the same number of samples, |k| log-spaced over 3 decades below max |k|\n"
+                              "(much better for fitting convergence rates |k|^alpha).");
 
         // Select the actual k samples for the geometric convergence experiment.
         ImGui::SetNextItemWidth(92.0f);
@@ -339,8 +348,9 @@ void IsosurfaceViewer::draw_gradient_panel()
         convergence_sample_count_ = std::clamp(convergence_sample_count_, 3, 101);
         ImGui::TextDisabled("Uniformly spaced; endpoints included. Max 101 samples.");
         ImGui::SetNextItemWidth(210.0f);
-        ImGui::SliderInt("Convergence mesh resolution", &convergence_resolution_, 16, 110);
+        ImGui::SliderInt("Convergence mesh resolution", &convergence_resolution_, 16, kMaxGridResolution);
         draw_singularity_convergence_report();
+        draw_classification_report();
 
         plot_with_cursor("##gradmag", sweep_.grad_magnitude.data(), KSweep::N, k_, 0.0f, max_grad * 1.05f, 75.0f);
         if (ImGui::CollapsingHeader("Gradient components and F(P,k)", false))
