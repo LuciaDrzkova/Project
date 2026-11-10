@@ -283,6 +283,24 @@ inline void write_snapshot_svg(std::ostream& out, const Result& r, const Snapsho
     out << "</svg>\n";
 }
 
+// The selected slices (1-based, as the gallery shows them) on which no part of
+// the F = 0 contour lies inside the window. A snapshot of such a slice shows
+// only node values and no surface; the viewer warns about it before saving.
+inline std::vector<int> slices_without_contour(const Result& result, const SnapshotRequest& request)
+{
+    std::vector<int> empty;
+    for (int slice : request.slices)
+    {
+        const bool found = std::any_of(result.segments.begin(), result.segments.end(), [&](const ContourSegment& s) {
+            return s.slice_index == slice && s.cell_u >= request.iu_min && s.cell_u < request.iu_max &&
+                   s.cell_v >= request.iv_min && s.cell_v < request.iv_max;
+        });
+        if (!found) empty.push_back(slice + 1);
+    }
+    std::sort(empty.begin(), empty.end());
+    return empty;
+}
+
 // Writes "<base>.svg" and "<base>.csv" into `directory` (created if needed;
 // an existing snapshot of the same name gets a _02, _03, ... suffix).
 inline SnapshotFiles write_snapshot(const Result& result, const SnapshotRequest& request,

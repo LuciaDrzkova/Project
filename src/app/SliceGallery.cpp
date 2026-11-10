@@ -535,8 +535,19 @@ void IsosurfaceViewer::draw_snapshot_popup()
     const std::filesystem::path directory = project_output_directory("snapshots");
     ImGui::Separator();
     if (problem.empty())
+    {
+        const std::vector<int> empty = iso_slices::slices_without_contour(result, request);
+        if (!empty.empty())
+        {
+            std::string list;
+            for (int s : empty) list += (list.empty() ? "" : ", ") + std::to_string(s);
+            ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.18f, 1.0f),
+                               "No part of the surface (F = 0) lies in this window on slice(s) %s. "
+                               "Move or enlarge the window, or choose other slices.", list.c_str());
+        }
         ImGui::TextWrapped("Saves %s.svg and .csv to %s", iso_slices::snapshot_base_name(result, request).c_str(),
                            directory.string().c_str());
+    }
     else
         ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "%s", problem.c_str());
 

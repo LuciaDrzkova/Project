@@ -51,6 +51,21 @@ int main(int argc, char** argv)
     request.iv_min = 0;
     request.iv_max = 2;
     check(iso_slices::validate_snapshot(result, request).empty(), "valid request is accepted");
+
+    // Empty-window detection: the sphere x^2+y^2+z^2 = 0.25 (resolution 8 on
+    // [-1,1]^3) crosses the central slices near the centre of the grid, but
+    // never the corner window of 2 x 2 cells.
+    {
+        const std::string sphere = "x^2+y^2+z^2-0.25";
+        const NodePtr sphereAst = parseExpression(sphere);
+        const iso_slices::Result s =
+            iso_slices::extract_and_export(sphereAst.get(), sphere, 0.0, 8, 1.0, 2, (out / "sphere").string());
+        iso_slices::SnapshotRequest centre{{3, 4, 5}, 2, 6, 2, 6};
+        iso_slices::SnapshotRequest corner{{3, 4, 5}, 0, 2, 0, 2};
+        check(iso_slices::slices_without_contour(s, centre).empty(), "the contour is found in the central window");
+        check(iso_slices::slices_without_contour(s, corner) == std::vector<int>({4, 5, 6}),
+              "empty corner window is reported for every slice (1-based numbers)");
+    }
     check(iso_slices::slice_list_label({1, 2, 3, 6}) == "2-4_7", "slice label collapses consecutive runs");
     check(iso_slices::snapshot_base_name(result, request) == "xxx+yxy-0.3+kxz_slices_2-4_u1-3_v0-2",
           "base name encodes expression, slices and grid window: " + iso_slices::snapshot_base_name(result, request));
