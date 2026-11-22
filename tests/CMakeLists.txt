@@ -76,3 +76,7 @@ isolab_add_program(isosurface_direction_sweep direction_sweep.cpp)
 
 # Reproduces the complete experiment set of the thesis (chapter 5).
 isolab_add_program(isosurface_thesis_experiments thesis_experiments.cpp)
+
+# Linear interpolation between S_-eps and S_+eps as a reconstruction of S_0
+# (thesis report, "Linear interpolation of perturbed surfaces").
+isolab_add_program(isosurface_interpolation_experiments interpolation_experiments.cpp)
