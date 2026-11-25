@@ -23,6 +23,15 @@
 //                                   point of S_-eps, c(v) is the closest point of
 //                                   S_+eps; separates the interpolation error
 //                                   from the extraction error of the meshes
+//   normal_mid                      as exact_vertex_mid, but the correspondence
+//                                   follows the gradient line of F
+//   hybrid_cone                     vertex_mid_from_minus away from P, the
+//                                   weighted-cone patch over its boundary loop
+//                                   near P (no access to F)
+//   singular_cone                   Marching Cubes of F away from P, the
+//                                   weighted-cone patch projected onto F = 0
+//                                   near P (the proposed extraction)
+// All reconstructions are implemented in src/analysis/Reconstruction.h.
 //
 // Interpolating the implicit functions themselves is exact, since H_k = F + kG
 // is affine in k: (H_-eps + H_+eps) / 2 = F. The program checks this on the
@@ -37,6 +46,7 @@
 // Output: <dir>/interpolation_all.csv, one row per (F, G, eps, N, method).
 #include "analysis/ExactDistance.h"
 #include "analysis/LocalAlgebra.h"
+#include "analysis/Reconstruction.h"
 #include "analysis/StationaryPoints.h"
 #include "core/CsvFormat.h"
 #include "core/Grid.h"
@@ -83,49 +93,12 @@ const std::vector<std::string> kG = {"1", "x", "x+y", "x^2+y^2-z^2"};
 constexpr double kHalfExtent = 0.4;   // meshing domain [-0.4, 0.4]^3
 constexpr double kBox = 0.18;         // local box Q
 constexpr double kNear = 0.06;        // |p - P|_inf < kNear: "near P", otherwise "away from P"
-constexpr double kSdfHalf = 0.2;      // SDF sub-grid [-0.2, 0.2]^3 (same nodes as the main grid)
 
-// ----- indexed meshes in double precision -------------------------------------
+using iso_reconstruct::Mesh;
+using iso_reconstruct::bvh;
+using iso_reconstruct::fromResult;
+using iso_reconstruct::Method;
 
-struct Mesh {
-    std::vector<Point3> v;
-    std::vector<std::array<std::uint32_t, 3>> t;
-};
-
-// Welds corners at identical positions. The extractor's own vertex ids are not
-// used: when the field is (numerically) zero at a grid node, several edge
-// crossings fall onto that node, the extractor drops the resulting zero-area
-// triangles, and with per-edge ids this would leave artificial cracks.
-// Triangles that collapse to repeated corners after welding are dropped.
-Mesh fromResult(const IsosurfaceResult& r, double cell) {
-    Mesh m;
-    const double tol = 2e-4 * cell; // the extractor drops triangles whose corners are this close
-    std::map<std::array<long long, 3>, std::uint32_t> ids;
-    for (std::size_t i = 0; i + 2 < r.vertices.size(); i += 3) {
-        std::array<std::uint32_t, 3> tri{};
-        for (int c = 0; c < 3; ++c) {
-            const Point3 p = iso_research::surfacePoint(r.vertices[i + static_cast<std::size_t>(c)]);
-            const std::array<long long, 3> key{std::llround(p.x / tol), std::llround(p.y / tol), std::llround(p.z / tol)};
-            const auto [it, inserted] = ids.emplace(key, static_cast<std::uint32_t>(m.v.size()));
-            if (inserted) m.v.push_back(p);
-            tri[static_cast<std::size_t>(c)] = it->second;
-        }
-        if (tri[0] != tri[1] && tri[1] != tri[2] && tri[0] != tri[2]) m.t.push_back(tri);
-    }
-    return m;
-}
-
-iso_geometry::TriangleBvh bvh(const Mesh& m) {
-    std::vector<iso_geometry::Triangle> tris;
-    tris.reserve(m.t.size());
-    for (const auto& t : m.t) tris.push_back(iso_geometry::makeTriangle(m.v[t[0]], m.v[t[1]], m.v[t[2]]));
-    return iso_geometry::TriangleBvh(std::move(tris));
-}
-
-Point3 cross(const Point3& a, const Point3& b) { return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x}; }
-Point3 normalOf(const Mesh& m, const std::array<std::uint32_t, 3>& t) {
-    return cross(m.v[t[1]] - m.v[t[0]], m.v[t[2]] - m.v[t[0]]);
-}
 Point3 centroidOf(const Mesh& m, const std::array<std::uint32_t, 3>& t) {
     return (m.v[t[0]] + m.v[t[1]] + m.v[t[2]]) * (1.0 / 3.0);
 }
@@ -193,14 +166,7 @@ struct Errors {
     std::size_t failures = 0;
 };
 
-struct Topology {
-    std::size_t triangles = 0, vertices = 0, edges = 0, components = 0;
-    long long euler = 0;
-    std::size_t holeEdges = 0;        // boundary edges well inside Q (not created by clipping)
-    std::size_t nonManifoldEdges = 0; // edges with more than two triangles
-    std::size_t degenerate = 0;       // triangles of (almost) zero area
-    std::size_t flipped = -1;         // triangles whose orientation reversed w.r.t. the source mesh
-};
+using iso_reconstruct::Topology;
 
 // Mesh points in Q: vertices, centroids, and a barycentric grid near P.
 std::vector<Point3> meshPoints(const Mesh& m, double h) {
@@ -242,100 +208,58 @@ Errors measure(const Mesh& m, const iso_exact::Surface& s0, double h) {
 }
 
 Topology topology(const Mesh& m, double h, const Mesh* source = nullptr) {
-    Topology tp;
-    std::vector<std::size_t> kept;
-    for (std::size_t i = 0; i < m.t.size(); ++i)
-        if (inf(centroidOf(m, m.t[i])) <= kBox) kept.push_back(i);
-    tp.triangles = kept.size();
-    std::vector<std::uint32_t> parent(m.v.size());
-    std::iota(parent.begin(), parent.end(), 0u);
-    auto find = [&](std::uint32_t a) {
-        while (parent[a] != a) a = parent[a] = parent[parent[a]];
-        return a;
-    };
-    std::map<std::pair<std::uint32_t, std::uint32_t>, int> edges;
-    std::vector<char> used(m.v.size(), 0);
-    if (source) tp.flipped = 0;
-    for (std::size_t i : kept) {
-        const auto& t = m.t[i];
-        for (int c = 0; c < 3; ++c) {
-            const std::uint32_t a = t[static_cast<std::size_t>(c)], b = t[static_cast<std::size_t>((c + 1) % 3)];
-            used[a] = 1;
-            ++edges[{std::min(a, b), std::max(a, b)}];
-            parent[find(a)] = find(b);
-        }
-        const Point3 n = normalOf(m, t);
-        if (iso_geometry::norm(n) < 1e-12 * h * h) ++tp.degenerate;
-        if (source && iso_geometry::dot(n, normalOf(*source, source->t[i])) < 0.0) ++tp.flipped;
-    }
-    std::vector<char> root(m.v.size(), 0);
-    for (std::size_t v = 0; v < m.v.size(); ++v)
-        if (used[v]) {
-            ++tp.vertices;
-            const std::uint32_t r = find(static_cast<std::uint32_t>(v));
-            if (!root[r]) { root[r] = 1; ++tp.components; }
-        }
-    tp.edges = edges.size();
-    for (const auto& [e, count] : edges) {
-        if (count > 2) ++tp.nonManifoldEdges;
-        if (count == 1 && inf(m.v[e.first]) < kBox - 2.0 * h && inf(m.v[e.second]) < kBox - 2.0 * h) ++tp.holeEdges;
-    }
-    tp.euler = static_cast<long long>(tp.vertices) - static_cast<long long>(tp.edges) + static_cast<long long>(tp.triangles);
-    return tp;
+    return iso_reconstruct::topology(m, {0, 0, 0}, kBox, h, source);
 }
 
 // ----- reconstructions --------------------------------------------------------
 
-// Vertices of `from` moved halfway to their closest point on the mesh `to`
-// (only vertices near Q; the rest are irrelevant for the measurement).
-Mesh vertexMid(const Mesh& from, const iso_geometry::TriangleBvh& to, double h) {
-    Mesh m = from;
-    iso_parallel::parallelFor(m.v.size(), [&](std::size_t i) {
-        if (inf(from.v[i]) > kBox + 2.0 * h) return;
-        Point3 c;
-        if (to.nearestPoint(from.v[i], c)) m.v[i] = (from.v[i] + c) * 0.5;
-    });
-    return m;
+iso_reconstruct::Region nearQ(double h) { return {{0, 0, 0}, kBox + 2.0 * h}; }
+
+iso_reconstruct::ClosestFn closestFn(const iso_exact::Surface& s) {
+    return [&s](const Point3& a) { return closestOn(s, a); };
 }
 
-// The same on the exact surfaces.
+Mesh vertexMid(const Mesh& from, const iso_geometry::TriangleBvh& to, double h) {
+    return iso_reconstruct::vertexMid(from, to, nearQ(h));
+}
+
 Mesh exactVertexMid(const Mesh& from, const iso_exact::Surface& minus, const iso_exact::Surface& plus, double h,
                     std::size_t& failures) {
-    Mesh m = from;
-    std::vector<char> failed(m.v.size(), 0);
-    iso_parallel::parallelFor(m.v.size(), [&](std::size_t i) {
-        if (inf(from.v[i]) > kBox + 2.0 * h) return;
-        const auto a = closestOn(minus, from.v[i]);
-        if (!a) { failed[i] = 1; return; }
-        const auto b = closestOn(plus, *a);
-        if (!b) { failed[i] = 1; return; }
-        m.v[i] = (*a + *b) * 0.5;
-    });
-    failures = static_cast<std::size_t>(std::count(failed.begin(), failed.end(), 1));
+    return iso_reconstruct::exactVertexMid(from, closestFn(minus), closestFn(plus), nearQ(h), failures);
+}
+
+Mesh normalMid(const Mesh& from, const Exact& minus, const Exact& f, const Exact& plus, double h, std::size_t& failures) {
+    std::size_t fallbacks = 0;
+    Mesh m = iso_reconstruct::normalMid(from, *minus.field, *f.field, *plus.field, closestFn(plus.surface), h, nearQ(h),
+                                        fallbacks, failures);
+    failures += fallbacks; // reported together: vertices without a gradient-line partner
     return m;
 }
 
-// Zero level of the average of the two signed distance fields.
-Mesh sdfAverage(const Node* fAst, const Node* familyAst, double eps, int resolution,
-                const iso_geometry::TriangleBvh& minus, const iso_geometry::TriangleBvh& plus) {
-    const int res = resolution / 2; // [-0.2, 0.2] with the spacing of the main grid
-    const std::vector<double> hm = Isosurface::sampleField(familyAst, -eps, res, kSdfHalf);
-    const std::vector<double> hp = Isosurface::sampleField(familyAst, +eps, res, kSdfHalf);
-    const int n = res + 1;
-    std::vector<double> phi(hm.size());
-    iso_parallel::parallelFor(static_cast<std::size_t>(n), [&](std::size_t i) {
-        for (int j = 0; j < n; ++j)
-            for (int l = 0; l < n; ++l) {
-                const std::size_t idx = (i * static_cast<std::size_t>(n) + static_cast<std::size_t>(j)) * static_cast<std::size_t>(n) + static_cast<std::size_t>(l);
-                const Point3 p{gridCoordinate(static_cast<int>(i), res, kSdfHalf),
-                               gridCoordinate(j, res, kSdfHalf),
-                               gridCoordinate(l, res, kSdfHalf)};
-                const double dm = (hm[idx] < 0.0 ? -1.0 : 1.0) * minus.nearestDistance(p);
-                const double dp = (hp[idx] < 0.0 ? -1.0 : 1.0) * plus.nearestDistance(p);
-                phi[idx] = 0.5 * (dm + dp);
-            }
-    });
-    return fromResult(Isosurface::extract(fAst, 0.0, res, kSdfHalf, std::move(phi)), 2.0 * kSdfHalf / res);
+// Zero level of the average of the two signed distance fields on the main grid.
+Mesh sdfAverage(const Node* familyAst, double eps, int resolution, const iso_geometry::TriangleBvh& minus,
+                const iso_geometry::TriangleBvh& plus) {
+    const auto hm = Isosurface::sampleField(familyAst, -eps, resolution, kHalfExtent);
+    const auto hp = Isosurface::sampleField(familyAst, +eps, resolution, kHalfExtent);
+    return iso_reconstruct::sdfAverage(familyAst, resolution, kHalfExtent, hm, hp, minus, plus);
+}
+
+constexpr double kPatchCells = 4.0;
+
+Mesh hybridCone(const Mesh& interpolated, const iso_reconstruct::LocalStructure& local, double eps, double h,
+                iso_reconstruct::PatchInfo& info) {
+    Mesh m = interpolated;
+    const double r = iso_reconstruct::hybridRadius(local, eps, h, kPatchCells, 0.6 * kHalfExtent);
+    info = iso_reconstruct::conePatch(m, {0, 0, 0}, local.weights, r, h, nullptr);
+    return m;
+}
+
+Mesh singularCone(const Mesh& directF, const iso_reconstruct::LocalStructure& local, const iso_exact::Field& f, double h,
+                  iso_reconstruct::PatchInfo& info) {
+    Mesh m = directF;
+    info = iso_reconstruct::conePatch(m, {0, 0, 0}, local.weights,
+                                      iso_reconstruct::patchRadius(local, h, kPatchCells, 0.6 * kHalfExtent), h, &f);
+    return m;
 }
 
 std::string fmt(double v) { return iso_csv::number(v); }
@@ -381,15 +305,23 @@ int runSlices(const fs::path& root) {
         const NodePtr fAst = parseExpression(c.f);
         const int mu = iso_algebra::localAlgebra(*iso_poly::Cubic::fromExpression(fAst.get()), iso_algebra::IdealKind::Milnor).dimension;
         const NodePtr ast = parseExpression("(" + c.f + ")+k*(" + c.g + ")");
+        const auto s0 = makeExact(fAst.get(), 0.0, resolution, mu);
         const auto sm = makeExact(ast.get(), -c.eps, resolution, mu);
         const auto sp = makeExact(ast.get(), +c.eps, resolution, mu);
-        const Mesh mm = fromResult(sm->mesh, h), mp = fromResult(sp->mesh, h);
+        const Mesh m0 = fromResult(s0->mesh, h), mm = fromResult(sm->mesh, h), mp = fromResult(sp->mesh, h);
         const auto bm = bvh(mm), bp = bvh(mp);
+        const auto local = iso_reconstruct::localStructure(ast.get(), {0, 0, 0});
         std::size_t fails = 0;
+        iso_reconstruct::PatchInfo info;
+        const Mesh interpolated = vertexMid(mm, bp, h);
         const std::vector<std::pair<std::string, Mesh>> meshes = {
+            {"direct_S0", m0},
+            {"normal_mid", normalMid(mm, *sm, *s0, *sp, h, fails)},
+            {"hybrid_cone", hybridCone(interpolated, local, c.eps, h, info)},
+            {"singular_cone", singularCone(m0, local, *s0->field, h, info)},
             {"vertex_mid_from_minus", vertexMid(mm, bp, h)},
             {"vertex_mid_from_plus", vertexMid(mp, bm, h)},
-            {"sdf_average", sdfAverage(fAst.get(), ast.get(), c.eps, resolution, bm, bp)},
+            {"sdf_average", sdfAverage(ast.get(), c.eps, resolution, bm, bp)},
             {"exact_vertex_mid", exactVertexMid(mm, sm->surface, sp->surface, h, fails)},
         };
         for (const auto& [name, mesh] : meshes) writeSlice(root / "slices" / (c.tag + "_" + name + ".csv"), mesh, c.axis);
@@ -417,7 +349,7 @@ int main(int argc, char** argv) {
         out << "surface,type,F,G,eps,resolution,grid_spacing,method,hausdorff_Q,hausdorff_near_P,hausdorff_away_from_P,"
                "mesh_to_S0_max,S0_to_mesh_max,dist_P_to_mesh,distance_failures,triangles_in_Q,components,euler,"
                "hole_edges,nonmanifold_edges,degenerate_triangles,flipped_triangles,field_average_max_error,"
-               "correspondence_failures\n";
+               "correspondence_failures,patch_radius,patch_loops,patch_open_chains,patch_projection_failures\n";
         const auto t0 = std::chrono::steady_clock::now();
 
         for (const SurfaceSpec& s : kSurfaces) {
@@ -431,6 +363,7 @@ int main(int argc, char** argv) {
                 const Topology tp0 = topology(m0, h);
                 for (const std::string& g : kG) {
                     const NodePtr ast = parseExpression("(" + s.f + ")+k*(" + g + ")");
+                    const auto local = iso_reconstruct::localStructure(ast.get(), {0, 0, 0});
                     for (double eps : epsilons) {
                         const auto sm = makeExact(ast.get(), -eps, resolution, mu);
                         const auto sp = makeExact(ast.get(), +eps, resolution, mu);
@@ -446,18 +379,34 @@ int main(int argc, char** argv) {
                             for (std::size_t i = 0; i < f.size(); ++i) fieldError = std::max(fieldError, std::fabs(0.5 * (a[i] + b[i]) - f[i]));
                         }
 
-                        struct Row { std::string method; Mesh mesh; const Mesh* source; std::size_t corrFailures; };
+                        struct Row {
+                            std::string method;
+                            Mesh mesh;
+                            const Mesh* source;
+                            std::size_t corrFailures;
+                            const iso_reconstruct::PatchInfo* patch = nullptr;
+                        };
                         std::vector<Row> rows;
+                        rows.reserve(9); // rows[2] is referenced below
                         rows.push_back({"endpoint_minus", mm, nullptr, 0});
                         rows.push_back({"endpoint_plus", mp, nullptr, 0});
                         rows.push_back({"vertex_mid_from_minus", vertexMid(mm, bp, h), &mm, 0});
                         rows.push_back({"vertex_mid_from_plus", vertexMid(mp, bm, h), &mp, 0});
-                        rows.push_back({"sdf_average", sdfAverage(fAst.get(), ast.get(), eps, resolution, bm, bp), nullptr, 0});
+                        rows.push_back({"sdf_average", sdfAverage(ast.get(), eps, resolution, bm, bp), nullptr, 0});
                         std::size_t fails = 0;
                         Mesh ex = exactVertexMid(mm, sm->surface, sp->surface, h, fails);
                         rows.push_back({"exact_vertex_mid", std::move(ex), &mm, fails});
+                        std::size_t normalFails = 0;
+                        Mesh nm = normalMid(mm, *sm, *s0, *sp, h, normalFails);
+                        rows.push_back({"normal_mid", std::move(nm), &mm, normalFails});
+                        iso_reconstruct::PatchInfo hybridInfo, coneInfo;
+                        rows.push_back({"hybrid_cone", hybridCone(rows[2].mesh, local, eps, h, hybridInfo), nullptr, 0,
+                                        &hybridInfo});
+                        rows.push_back({"singular_cone", singularCone(m0, local, *s0->field, h, coneInfo), nullptr, 0,
+                                        &coneInfo});
 
-                        auto write = [&](const std::string& method, const Errors& e, const Topology& tp, std::size_t corr) {
+                        auto write = [&](const std::string& method, const Errors& e, const Topology& tp, std::size_t corr,
+                                         const iso_reconstruct::PatchInfo* patch) {
                             out << iso_csv::quote(s.folder) << ',' << iso_csv::quote(s.type) << ',' << iso_csv::quote(s.f) << ','
                                 << iso_csv::quote(g) << ',' << fmt(eps) << ',' << resolution << ',' << fmt(h) << ',' << method << ','
                                 << fmt(e.all) << ',' << fmt(e.near) << ',' << fmt(e.far) << ',' << fmt(e.meshToS0) << ','
@@ -465,10 +414,17 @@ int main(int argc, char** argv) {
                                 << tp.components << ',' << tp.euler << ',' << tp.holeEdges << ',' << tp.nonManifoldEdges << ','
                                 << tp.degenerate << ',';
                             if (tp.flipped == static_cast<std::size_t>(-1)) out << ""; else out << tp.flipped;
-                            out << ',' << fmt(fieldError) << ',' << corr << '\n';
+                            out << ',' << fmt(fieldError) << ',' << corr << ',';
+                            if (patch && patch->applied)
+                                out << fmt(patch->radius) << ',' << patch->loops << ',' << patch->openChains << ','
+                                    << patch->projectionFailures;
+                            else
+                                out << ",,,";
+                            out << '\n';
                         };
-                        write("direct_S0", e0, tp0, 0);
-                        for (const Row& r : rows) write(r.method, measure(r.mesh, s0->surface, h), topology(r.mesh, h, r.source), r.corrFailures);
+                        write("direct_S0", e0, tp0, 0, nullptr);
+                        for (const Row& r : rows)
+                            write(r.method, measure(r.mesh, s0->surface, h), topology(r.mesh, h, r.source), r.corrFailures, r.patch);
                         out.flush();
                     }
                     const double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();

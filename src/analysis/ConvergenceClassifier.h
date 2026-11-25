@@ -338,7 +338,9 @@ inline bool weightedNondegenerate(const std::vector<std::pair<iso_research::Expo
                         auto v = u;
                         v[i] += d;
                         const double gv = gradNorm(v);
-                        if (gv < g) { g = gv; u = v; improved = 1; }
+                        // A real decrease, not rounding noise (on a sphere where
+                        // |grad| is constant the search would otherwise wander).
+                        if (gv < g * (1.0 - 1e-9)) { g = gv; u = v; improved = 1; }
                     }
             }
         best = std::min(best, g);
@@ -346,24 +348,20 @@ inline bool weightedNondegenerate(const std::vector<std::pair<iso_research::Expo
     return best > 1e-4 * maxNorm;
 }
 
-// Weighted principal part of F from its 3-jet: weights w > 0 such that every
-// monomial has weighted degree >= 1 and the degree-1 monomials (the principal
-// part) involve all three variables. Chooses a nondegenerate one if possible.
-inline Prediction predict(const iso_research::ResearchAnalysis& r) {
-    Prediction p;
+struct PrincipalPart {
+    bool found = false;
+    bool nondegenerate = false;
+    std::array<double, 3> weights{kNaN, kNaN, kNaN};
+    std::string text;
+};
+
+// Weighted principal part of F from its 3-jet c[20] at P: weights w > 0 such
+// that every monomial has weighted degree >= 1 and the degree-1 monomials (the
+// principal part) involve all three variables. Chooses a nondegenerate one if
+// possible.
+inline PrincipalPart principalPart(const std::array<double, 20>& cf) {
+    PrincipalPart p;
     const auto& e = iso_research::exponents();
-    const auto& cf = r.fTaylor.data.taylor;
-    const auto& cg = r.gTaylor.data.taylor;
-    p.orderF = r.fTaylor.firstNonzeroOrder;
-    p.orderG = r.gTaylor.firstNonzeroOrder;
-    if (r.affineStatus != "STRUCTURALLY_AFFINE_IN_K") {
-        p.note = "family is not verified to be F + kG";
-        return p;
-    }
-    if (p.orderF < 2) {
-        p.note = "P is not a singular point of S_0 (F has a nonzero value or gradient at P)";
-        return p;
-    }
     const double sf = jetScale(cf);
     std::vector<std::pair<iso_research::Exponent3, double>> terms; // order >= 2 terms of F
     for (std::size_t i = 4; i < 20; ++i)
@@ -395,18 +393,41 @@ inline Prediction predict(const iso_research::ResearchAnalysis& r) {
         for (const auto& t : terms)
             if (std::fabs(weightedDegree(t.first, w) - 1.0) < 1e-9) principal.push_back(t);
         const bool nondegenerate = weightedNondegenerate(principal, w);
-        if (!p.weightsFound || (nondegenerate && !p.principalNondegenerate)) {
-            p.weightsFound = true;
+        if (!p.found || (nondegenerate && !p.nondegenerate)) {
+            p.found = true;
             p.weights = w;
-            p.principalNondegenerate = nondegenerate;
+            p.nondegenerate = nondegenerate;
             std::ostringstream text;
             for (const auto& [mono, coeff] : principal)
                 text << (coeff < 0 ? " - " : (text.tellp() > 0 ? " + " : "")) << iso_csv::shortNumber(std::fabs(coeff))
                      << '*' << monomialText(mono);
-            p.principalPart = text.str();
+            p.text = text.str();
         }
-        if (p.principalNondegenerate) break;
+        if (p.nondegenerate) break;
     }
+    return p;
+}
+
+inline Prediction predict(const iso_research::ResearchAnalysis& r) {
+    Prediction p;
+    const auto& e = iso_research::exponents();
+    const auto& cf = r.fTaylor.data.taylor;
+    const auto& cg = r.gTaylor.data.taylor;
+    p.orderF = r.fTaylor.firstNonzeroOrder;
+    p.orderG = r.gTaylor.firstNonzeroOrder;
+    if (r.affineStatus != "STRUCTURALLY_AFFINE_IN_K") {
+        p.note = "family is not verified to be F + kG";
+        return p;
+    }
+    if (p.orderF < 2) {
+        p.note = "P is not a singular point of S_0 (F has a nonzero value or gradient at P)";
+        return p;
+    }
+    const PrincipalPart pp = principalPart(cf);
+    p.weightsFound = pp.found;
+    p.principalNondegenerate = pp.nondegenerate;
+    p.weights = pp.weights;
+    p.principalPart = pp.text;
     if (!p.weightsFound) {
         p.note = "no weighted principal part within the 3-jet (degenerate or higher-order singularity)";
         return p;

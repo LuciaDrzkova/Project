@@ -97,6 +97,7 @@ if(ISOLAB_BUILD_APP)
     src/app/ViewerPanels.cpp
     src/app/SliceGallery.cpp
     src/app/AnalysisJobs.cpp
+    src/app/ReconstructionPanel.cpp
     src/app/OverlayRenderer.cpp
   )
   target_include_directories(isosurface_lab PRIVATE src/app)

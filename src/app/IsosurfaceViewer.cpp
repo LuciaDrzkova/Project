@@ -63,7 +63,8 @@ void IsosurfaceViewer::throttle_when_idle()
 
     // Background jobs need frames so their completion is noticed and shown.
     const bool busy = mesh_dirty_ || sweep_dirty_ || batch_job_.running() ||
-                      convergence_job_.running() || classification_job_.running() || mouse_held;
+                      convergence_job_.running() || classification_job_.running() ||
+                      reconstruction_job_.running() || mouse_held;
     if (busy)
     {
         active_frames_left_ = kActiveFramesAfterEvent;
@@ -155,6 +156,10 @@ void IsosurfaceViewer::draw(const std::string& draw_mode)
         overlay_.draw(Layer::CellCorners, {GL_POINTS, 1.0f, 7.0f});
     }
     overlay_.draw(Layer::PointOfInterest, {GL_POINTS, 1.0f, 9.0f});
+    if (reconstruction_shown_ && show_reconstruction_minus_)
+        overlay_.draw(Layer::PerturbedMinus, {GL_LINES, 0.55f, 1.0f});
+    if (reconstruction_shown_ && show_reconstruction_plus_)
+        overlay_.draw(Layer::PerturbedPlus, {GL_LINES, 0.55f, 1.0f});
     // The selected grid node is drawn on top of the surface so it stays easy
     // to locate after rotating, even when occluded. It is a real triangle
     // sphere, not a GL_POINTS sprite (some drivers only support 1px points).
@@ -261,7 +266,21 @@ void IsosurfaceViewer::rebuild_surface()
             last_build_ms_ = result.buildMillis;
             return;
         }
+        // Any change of F, k or the grid replaces a displayed reconstruction.
+        clear_reconstruction();
+        show_surface(std::move(result));
+        last_build_ms_ = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - start).count();
+    }
+    catch (const std::exception& error)
+    {
+        runtime_message_ = std::string("Surface rebuild failed: ") + error.what();
+    }
+}
 
+void IsosurfaceViewer::show_surface(IsosurfaceResult&& result)
+{
+    {
         // The extractor emits triangle soup (three corners per triangle)
         // plus, per corner, the id of the grid-edge vertex it came from.
         // Reconstruct edge-connected vertex fans before handing it to PMP:
@@ -373,8 +392,6 @@ void IsosurfaceViewer::rebuild_surface()
         update_mesh();
         last_surface_result_ = std::move(result);
         last_triangle_count_ = last_surface_result_.vertices.size() / 3;
-        last_build_ms_ = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - start).count();
         glyph_geometry_dirty_ = true;
         cell_geometry_dirty_ = true;
         if (!first_mesh_built_)
@@ -382,10 +399,6 @@ void IsosurfaceViewer::rebuild_surface()
             set_scene(pmp::vec3(0.0f, 0.0f, 0.0f), std::max(0.5f, 1.8f * half_extent_));
             first_mesh_built_ = true;
         }
-    }
-    catch (const std::exception& error)
-    {
-        runtime_message_ = std::string("Surface rebuild failed: ") + error.what();
     }
 }
 

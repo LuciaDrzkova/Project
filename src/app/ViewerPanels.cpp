@@ -33,6 +33,7 @@ void IsosurfaceViewer::process_imgui()
 {
     poll_batch_job();
     poll_convergence_job();
+    poll_reconstruction_job();
     // Open the adapted startup setup as a modal in the PMP viewer's
     // standard ImGui panel. This program generates the isosurface
     // directly, so there is no input mesh to load.
@@ -69,6 +70,7 @@ void IsosurfaceViewer::process_imgui()
     draw_slice_panel();
     draw_cell_panel();
     draw_gradient_panel();
+    draw_reconstruction_panel();
     draw_rendering_panel();
 
     ImGui::Separator();

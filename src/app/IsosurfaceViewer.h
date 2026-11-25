@@ -9,11 +9,14 @@
 //   SliceGallery.cpp      2D slice extraction state, slice gallery, snapshots
 //   AnalysisJobs.cpp      background convergence analysis, k -> 0 classification
 //                         and the F+kG batch
+//   ReconstructionPanel.cpp  reconstruction of S_0 from S_-eps and S_+eps
+//                         (interpolation methods and the singular cone patch)
 
 #include "BackgroundJob.h"
 #include "OverlayRenderer.h"
 
 #include "analysis/ConvergenceClassifier.h"
+#include "analysis/Reconstruction.h"
 #include "analysis/SingularityBatch.h"
 #include "analysis/SingularityConvergence.h"
 #include "core/Expr.h"
@@ -77,6 +80,13 @@ private:
         std::string message;
     };
 
+    struct ReconstructionJobResult
+    {
+        IsosurfaceResult surface;                      // the reconstruction of S_0
+        std::vector<OverlayVertex> minus_lines, plus_lines; // S_-eps, S_+eps near P
+        std::string summary;
+    };
+
     static constexpr int kMaxGridResolution = 256;
     static constexpr int kActiveFramesAfterEvent = 10;
 
@@ -85,6 +95,8 @@ private:
     void sanitize_parameters();
     void apply_expression();
     void rebuild_surface();
+    // Hands an extracted (or reconstructed) surface to PMP for display.
+    void show_surface(IsosurfaceResult&& result);
     void recolor_surface();
     pmp::Color surface_color(float grad_mag) const;
     void rebuild_k_sweep();
@@ -143,6 +155,15 @@ private:
     void start_batch_experiment();
     void poll_batch_job();
     void draw_batch_experiment_popup();
+
+    // ---- ReconstructionPanel.cpp: S_0 from S_-eps and S_+eps -----------------
+    void draw_reconstruction_panel();
+    void start_reconstruction_job();
+    static ReconstructionJobResult run_reconstruction_job(const std::string& expression,
+                                                          iso_reconstruct::Method method,
+                                                          const iso_reconstruct::Settings& settings);
+    void poll_reconstruction_job();
+    void clear_reconstruction();
 
     // ---- Expression -----------------------------------------------------------
     std::array<char, 512> expression_buffer_{};
@@ -238,6 +259,17 @@ private:
     iso_classify::Classification classification_{};
     std::string classification_message_;
     BackgroundJob<ClassificationJobResult> classification_job_;
+
+    // ---- Reconstruction of S_0 -------------------------------------------------
+    float reconstruction_eps_ = 0.01f;
+    int reconstruction_method_ = static_cast<int>(iso_reconstruct::Method::SingularCone);
+    float reconstruction_patch_cells_ = 4.0f;
+    bool reconstruction_shown_ = false;    // the displayed mesh is a reconstruction, not S_k
+    bool show_reconstruction_minus_ = true;
+    bool show_reconstruction_plus_ = true;
+    std::string reconstruction_summary_;
+    std::string reconstruction_message_;
+    BackgroundJob<ReconstructionJobResult> reconstruction_job_;
 
     // ---- F + kG batch ----------------------------------------------------------
     std::array<char, 512> batch_f_expression_buffer_{};

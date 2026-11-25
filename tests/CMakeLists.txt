@@ -80,3 +80,8 @@ isolab_add_program(isosurface_thesis_experiments thesis_experiments.cpp)
 # Linear interpolation between S_-eps and S_+eps as a reconstruction of S_0
 # (thesis report, "Linear interpolation of perturbed surfaces").
 isolab_add_program(isosurface_interpolation_experiments interpolation_experiments.cpp)
+
+# Reconstructions of S_0 (src/analysis/Reconstruction.h): weighted-cone patch,
+# field average, every method of the viewer's "Reconstruct S_0" panel.
+isolab_add_program(isosurface_reconstruction_tests test_reconstruction.cpp)
+add_test(NAME reconstruction COMMAND isosurface_reconstruction_tests)

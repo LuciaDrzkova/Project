@@ -48,6 +48,8 @@ public:
         SliceContours,
         SlicePlane,
         SliceSelectedPoint,
+        PerturbedMinus, // S_-eps of the reconstruction (wireframe)
+        PerturbedPlus,  // S_+eps of the reconstruction (wireframe)
         LayerCount
     };
 

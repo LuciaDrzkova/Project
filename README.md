@@ -59,6 +59,17 @@ diagnostics tools (no pmp download, no OpenGL needed).
     of G (when F and G are polynomials of degree ≤ 3).
 
   Results go to `experiments/classify_<timestamp>/convergence_classification.csv`.
+- **Reconstruct S0 from S-eps and S+eps**: builds `S_-eps` and `S_+eps` of the
+  current family and reconstructs `S_0 = {F = 0}` near the point of interest P
+  with one of eight methods (see `analysis/Reconstruction.h`): the average of
+  the implicit values (identical to Marching Cubes of F), vertex interpolation
+  of the meshes or of the exact surfaces, vertex interpolation along `grad F`,
+  the average of signed distance fields, the hybrid (interpolation away from P,
+  cone patch at P) and the **singular cone patch** (Marching Cubes of F with the
+  neighbourhood of P rebuilt as a weighted cone over its boundary loop). The
+  result replaces the displayed surface, `S_±eps` are drawn as wireframes, and
+  the panel reports the topology and the vertex error near P next to those of
+  Marching Cubes of F.
 - **Batch**: runs the same analysis for `F + k·G_i` over 25 perturbations
   `G_i`. Each run also gets its classification, and the batch writes
   `classification_summary.csv` (one row per G and side of k = 0).
@@ -93,6 +104,7 @@ src/
 │   ├── FamilyAnalysis.h          analyzeFamily(): all analyses on one shared mesh pass; CSV export
 │   ├── DirectionSweep.h          map of linear perturbation directions, discriminant by bisection
 │   ├── ConvergenceClassifier.h   k -> 0 classification: rates with CIs, singular points, prediction
+│   ├── Reconstruction.h          S_0 from S_-eps, S_+eps (interpolations) and the weighted-cone patch at P
 │   └── SingularityBatch.h        25-family F + kG batch runner
 └── app/         the PMP/ImGui viewer
     ├── main.cpp                entry point
@@ -100,6 +112,7 @@ src/
     ├── ViewerPanels.cpp        ImGui control panel and setup dialog
     ├── SliceGallery.cpp        2D slice state and gallery window
     ├── AnalysisJobs.cpp        background convergence analysis and batch
+    ├── ReconstructionPanel.cpp "Reconstruct S0" panel (background job, wireframes of S_±eps)
     ├── OverlayRenderer.h/.cpp  all raw OpenGL for helper geometry
     ├── BackgroundJob.h         worker-thread job polled from the UI thread
     └── ColorMap.h              colour ramp
@@ -185,6 +198,8 @@ the exact-surface measurements on that same mesh. It writes:
 | `isosurface_deformation_criteria_tests`, `isosurface_unfolding_criterion_tests` | analytic singularity criteria |
 | `isosurface_singularity_sweep_tests` | k sweep over the built-in families (writes `singularity_sweep_artifacts/`) |
 | `isosurface_mesh_interpolation_tests` | mesh-to-mesh interpolation experiment |
+| `isosurface_reconstruction_tests` | cone patch on the ten thesis surfaces (loops, topology, vertices on F = 0), field average, every reconstruction method |
+| `isosurface_interpolation_experiments` | reconstructions of S_0 for 10 surfaces × 4 G × 5 eps × 3 grids, compared with the exact S_0: `isosurface_interpolation_experiments interpolation_results` (about 7 minutes; `--slices` for the figures) |
 | `isosurface_singularity_diagnostics` | full catalogue diagnostics CLI, see `tests/SINGULARITY_DIAGNOSTICS.md` and `tests/run_resolution_series.py` |
 
 All measurements are numerical diagnostics, not proofs. Read the CSV
