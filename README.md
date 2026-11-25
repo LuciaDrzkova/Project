@@ -17,6 +17,7 @@ downloads [pmp-library](https://github.com/pmp-library/pmp-library) 3.0 on
 first configure.
 
 ```bash
+rm -rf build
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ./build/isosurface_lab                      # the interactive viewer
