@@ -1,0 +1,622 @@
+% =============================================================================
+\chapter{Experimental Results}
+\label{ch:experiments}
+% Colours of the direction-sweep maps (same palette as the images in data/).
+\definecolor{sw0}{RGB}{68,1,84}
+\definecolor{sw1}{RGB}{72,40,120}
+\definecolor{sw2}{RGB}{62,74,137}
+\definecolor{sw3}{RGB}{49,104,142}
+\definecolor{sw4}{RGB}{38,130,142}
+\definecolor{sw5}{RGB}{31,158,137}
+\definecolor{sw6}{RGB}{53,183,121}
+\definecolor{sw7}{RGB}{109,205,89}
+\definecolor{sw8}{RGB}{253,231,37}
+% Style of the exact zero-set slices in this chapter.
+\pgfplotsset{zeroset/.style={axis equal image, empty line=jump, tick label style={font=\scriptsize},
+    label style={font=\scriptsize}, title style={font=\small}, legend style={font=\scriptsize}, legend cell align=left}}
+% =============================================================================
+% PURPOSE: tests every prediction of Chapter 3 on all ten reference surfaces
+% with the methods of Chapter 4, and measures how well Marching Cubes
+% represents the neighbourhood of the singular points (the baseline for the
+% comparison required by the assignment).
+
+This chapter reports the experiments on the ten reference surfaces of
+Table~\ref{tab:reference-surfaces}. Section~\ref{sec:exp-setup} lists the
+perturbations. Sections~\ref{sec:exp-validation}--\ref{sec:exp-sweep} test
+the predictions of Chapter~\ref{ch:theory}: convergence rates, singular
+points, essential directions and discriminant directions.
+Section~\ref{sec:exp-accuracy} measures how well the Marching Cubes meshes
+represent the surfaces near their singular points, which is the baseline for
+the comparison with other methods outlined in Section~\ref{sec:exp-comparison}.
+
+% -----------------------------------------------------------------------------
+\section{Setup}
+\label{sec:exp-setup}
+% PURPOSE: what was run, so that every table can be reproduced.
+
+Every reference surface $F$ was combined with the same thirteen perturbations
+\[
+1,\ x,\ y,\ z,\ x+y,\ x+z,\ x+y+z,\ 2x-y+3z,\ x^2,\ x^2+y^2-z^2,\ xy,\ x^3,\ x^2y+y^2z+z^2x,
+\]
+covering the orders $0$ to $3$; with $G=F$, for which $S_k=S_0$ for all
+$k\neq-1$ and every measured distance must vanish; and, for the four cubic cones,
+with the balanced perturbation located by the direction sweep
+(Section~\ref{sec:exp-sweep}). This gives $145$ families. Each family was
+analysed at the resolutions $32$, $64$ and $128$ with the parameters of
+Section~\ref{sec:method-parameters}: nine values of $|k|$ in
+$[10^{-4},10^{-2}]$ on each side of zero, the local box $[-0.18,0.18]^3$ and
+the domain $[-0.4,0.4]^3$. All results were produced by
+\texttt{isosurface\_thesis\_experiments} in $17$ minutes on a ten-core laptop and are
+stored as CSV files, one folder per surface, resolution and perturbation.
+
+\begin{figure}[!h]
+    \centering
+    \begin{subfigure}{0.24\textwidth}\centering
+        \thesisimage{pictures/ch5/surface_A1.png}{\textwidth}{3.2cm}{$x^2+y^2-z^2+xyz$, $k=0$}
+        \caption{$A_1$}\end{subfigure}\hfill
+    \begin{subfigure}{0.24\textwidth}\centering
+        \thesisimage{pictures/ch5/surface_A2.png}{\textwidth}{3.2cm}{$x^2+y^2+z^3$, $k=0$}
+        \caption{$A_2$}\end{subfigure}\hfill
+    \begin{subfigure}{0.24\textwidth}\centering
+        \thesisimage{pictures/ch5/surface_D4.png}{\textwidth}{3.2cm}{$x^2+y^3-3yz^2$, $k=0$}
+        \caption{$D_4$}\end{subfigure}\hfill
+    \begin{subfigure}{0.24\textwidth}\centering
+        \thesisimage{pictures/ch5/surface_E6.png}{\textwidth}{3.2cm}{$x^3+y^3+z^3+xyz$, $k=0$}
+        \caption{$\tilde E_6$}\end{subfigure}
+    \caption[Representatives of the four types]{One reference surface of each type
+    near its singular point (domain $[-0.4,0.4]^3$, resolution $128$).}
+    \label{fig:types}
+\end{figure}
+
+% -----------------------------------------------------------------------------
+\section{Validation of the Measurement}
+\label{sec:exp-validation}
+% PURPOSE: before the measurements can test the theory, the measuring
+% instrument must be shown to be correct on cases with known answers, and
+% the improvement over the mesh-to-mesh comparison must be quantified.
+
+\paragraph{Known values.} For $G=F$ the measured local Hausdorff distance is
+below $10^{-12}$ at every $k$ and resolution (``$=$'' in the tables). For the
+Fermat cone and $G=1$ the distance from the origin to $S_k$ is exactly
+$|k|^{1/3}$ (Section~\ref{sec:method-exact}); the measured values agree to
+$10^{-10}$. The local Hausdorff distance itself behaves as predicted by
+Proposition~\ref{prop:self-similar}: $d_a(k)=C|k|^{1/3}$ with $C=1.163$, the
+Hausdorff distance between the model surface $\{F_+=\mp1\}$ and the cone. It is
+larger than $1$ because the point of $S_k$ farthest from the cone lies in the
+direction $(1,1,1)$, not on a coordinate axis. For the same reason the constant
+depends on the perturbation and on the side: for $G=x$ it is $1.03$ for $k<0$
+and $0.29$ for $k>0$.
+
+\paragraph{Independence of the grid.} The exact distances do not depend on the
+resolution of the mesh that supplied the starting points: across the resolutions
+$32$, $64$ and $128$ the fitted exponents of the cubic cones differ by at most
+$0.02$, and by less than $0.002$ for all linear perturbations. This is the decisive difference from a comparison of two meshes,
+whose result depends on the grid (Figure~\ref{fig:mesh-vs-exact}). For
+$F_++kx$ and $k>0$ the mesh-to-mesh comparison gives the exponents $0.38$,
+$0.41$ and $0.44$ at the three resolutions, approaching the true value $0.5$
+only slowly, because the deformation $0.29|k|^{1/2}$ is comparable to the grid
+spacing over most of the range. The exact measurement gives $0.500$ at every
+resolution. The asymmetry between $k<0$ and $k>0$ reported in earlier drafts
+of this work was an artefact of the mesh comparison; the true rates are equal,
+only the constants differ.
+
+\begin{figure}[!h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.66\textwidth, height=0.46\textwidth, xmode=log, ymode=log,
+    xlabel={$|k|$}, ylabel={$d_a(k)$}, legend pos=south east, legend cell align=left,
+    legend style={font=\scriptsize}, grid=major, grid style={gray!25}, unbounded coords=discard]
+\addplot[only marks, mark=*, mark size=1.4pt, black] table[x=absk, y=exact] {data/fermat_x_pos_res128.dat};
+\addlegendentry{exact, every resolution}
+\addplot[only marks, mark=o, mark size=1.6pt, red] table[x=absk, y=mesh] {data/fermat_x_pos_res32.dat};
+\addlegendentry{mesh to mesh, $N=32$}
+\addplot[only marks, mark=square, mark size=1.4pt, orange] table[x=absk, y=mesh] {data/fermat_x_pos_res64.dat};
+\addlegendentry{mesh to mesh, $N=64$}
+\addplot[only marks, mark=triangle, mark size=1.8pt, blue] table[x=absk, y=mesh] {data/fermat_x_pos_res128.dat};
+\addlegendentry{mesh to mesh, $N=128$}
+\addplot[black, dashed, domain=1e-4:1e-2, samples=2] {0.294*x^0.5};
+\addlegendentry{$0.294\,|k|^{1/2}$}
+\end{axis}
+\end{tikzpicture}
+\caption[Exact versus mesh-to-mesh distance]{Local Hausdorff distance for
+$F_++kx$, $k>0$. The exact measurement follows $C|k|^{1/2}$ at all resolutions;
+the distance between two meshes is dominated by their extraction errors when
+the deformation is small and depends on the grid.}
+\label{fig:mesh-vs-exact}
+\end{figure}
+
+% -----------------------------------------------------------------------------
+\section{Convergence Rates}
+\label{sec:exp-rates}
+% PURPOSE: tests the scaling principle (3.5) on all surfaces and perturbations.
+
+Table~\ref{tab:summary} summarizes all perturbations. Of the $268$ fitted
+one-sided rates (all sides except $G=F$), $253$ have a $95\%$ confidence interval
+that meets the predicted range~\eqref{eq:alpha-range}. Every stationary-point
+count, $2592$ in total, is certified complete.
+
+%%INSERT summary.tex
+
+\paragraph{The cubic cones.} Table~\ref{tab:detail-fermat} lists the results
+for the Fermat cone. All rates agree with $\alpha=1/(3-m)$ to within $0.002$: $\frac13$
+for $G=1$, $\frac12$ for every linear $G$, and $1$ for all perturbations of
+order two and three. The three other cones give the same exponents
+($\frac13$, $\frac12$, $1$) with different constants; the exactness of the rates
+is the self-similarity of Proposition~\ref{prop:self-similar}, which holds for
+every homogeneous $F$ and $G$.
+
+%%INSERT detail-fermat.tex
+
+\paragraph{Quasi-homogeneous singularities.} For $A_1$, $A_2$ and $D_4$ the
+weights differ between the variables, and the scaling principle predicts a
+range of exponents (Tables~\ref{tab:detail-a1}--\ref{tab:detail-d4}). The data
+show which end of the range is attained and why.
+\begin{itemize}
+    \item For the $A_1$ point, $G=1$ gives $\alpha=\frac12$ and every $G$ with
+          $G(0)=0$ gives $\alpha=1$: such perturbations are inessential
+          (their essential coordinates are zero), and their effect is a
+          translation by $O(k)$ plus a constant of order $k^2$
+          (Section~\ref{sec:vector}).
+    \item For $x^2+y^2+z^3$ ($A_2$) and $G=z$, the predicted range is
+          $[\frac12,\frac34]$, and both ends occur: $0.496$ for $k<0$ and $0.739$
+          for $k>0$. For $k<0$ the polynomial $z^3+kz$ has the new real zeros
+          $\pm\sqrt{-k}$, and the surface changes along the $z$-axis on the scale
+          $|k|^{1/2}$; for $k>0$ there are no new zeros, and the change is
+          visible only in the $x$ and $y$ directions, on the scale
+          $\lambda^{1/2}=|k|^{3/4}$.
+    \item For the same surface and $G=x$, the measured rate $0.66$ is the lower
+          end $\frac23$. The perturbation is inessential, but it produces a thin
+          spike, $(x+\frac k2)^2+y^2=\frac{k^2}{4}-z^3$, of height
+          $(k^2/4)^{1/3}\propto|k|^{2/3}$ above the singular point
+          (Figure~\ref{fig:spike-slice}).
+\end{itemize}
+
+
+\begin{figure}[!h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[zeroset, width=0.55\textwidth, xmin=-0.06, xmax=0.06, ymin=-0.06, ymax=0.06,
+    xlabel={$x$}, ylabel={$z$}, legend pos=south east, xtick={-0.05,0,0.05}, ytick={-0.05,0,0.05}]
+\addplot[black, thick] table[x=u, y=v] {data/slice_a2_spike_0.dat};
+\addlegendentry{$k=0$}
+\addplot[blue, thick] table[x=u, y=v] {data/slice_a2_spike_a.dat};
+\addlegendentry{$k=0.003$}
+\addplot[red, thick] table[x=u, y=v] {data/slice_a2_spike_b.dat};
+\addlegendentry{$k=0.01$}
+\addplot[gray, densely dashed, domain=-0.06:0.06, samples=2, forget plot] {0.0125};
+\addplot[gray, densely dashed, domain=-0.06:0.06, samples=2, forget plot] {0.0292};
+\addplot[gray, densely dotted, domain=-0.06:0.06, samples=2, forget plot] {0.00625};
+\end{axis}
+\end{tikzpicture}
+\caption[The spike of an $A_2$ point]{Slice $y=0$ of $x^2+y^2+z^3+kx=0$. The
+perturbation adds a spike above the singular point, of height
+$(k^2/4)^{1/3}$ (dashed) and width about $k/2$. The dotted line marks one grid
+spacing of the finest grid ($h=0.00625$): the spike is narrower than a cell
+for every tested $k$, and Marching Cubes misses it.}
+\label{fig:spike-slice}
+\end{figure}
+
+%%INSERT detail-a1.tex
+
+%%INSERT detail-a2.tex
+
+%%INSERT detail-d4.tex
+
+\paragraph{Deviations.} The $15$ one-sided fits whose confidence interval
+misses the prediction fall into two groups.
+\begin{enumerate}
+    \item \emph{Essential and inessential parts combined} ($10$ fits, $A_2$ and
+          $D_4$, all but one for $k>0$). For example $x^2+y^2+z^3$ with $G=x+z$ gives $0.787$
+          against the upper end $0.75$. The essential part $z$ deforms the
+          surface on the scale $|k|^{3/4}$, while the inessential part $x$
+          translates it by $O(|k|)$. The measured distance is the larger of the
+          two contributions, and over the range $10^{-4}\le|k|\le10^{-2}$ the
+          crossover between them bends the log-log line. The narrow confidence
+          interval reflects the small scatter, not the curvature of the line
+          (Section~\ref{sec:method-rates}); the prediction is asymptotic and
+          is reached only for smaller $|k|$.
+    \item \emph{Deformations below the resolution of the measurement} ($5$ fits,
+          $D_4$ with $G=xy$, $x^2+y^2-z^2$ and $x^2y+y^2z+z^2x$). The deformation
+          is of order $|k|\cdot10^{-4}$, and the measured distance levels off at
+          about $1.5\cdot10^{-4}$. At a $D_4$ point the gradient vanishes to second
+          order in two directions, the Lagrange system \eqref{eq:lagrange} is
+          nearly singular, and the distance falls back to the spacing of the
+          finest samples. These values are the resolution limit of the
+          measurement, not a property of the surfaces.
+\end{enumerate}
+
+% -----------------------------------------------------------------------------
+\section{Singular Points}
+\label{sec:exp-singular}
+% PURPOSE: tests Proposition 3.6 (linear perturbations of diagonal cones), the
+% conservation of the Milnor number, and the behaviour at the singular point.
+
+\paragraph{At the singular point.} In every experiment the behaviour of the
+origin follows~\eqref{eq:at-origin}: it leaves the surface for $G=1$, becomes
+regular when $G(0)=0\neq\nabla G(0)$, and stays singular when $G$ has order at
+least two. For the Fermat cone and $G=x^2$ the certified search finds two
+stationary points of multiplicity $4$, the origin and $(-\frac23k,0,0)$, both of
+type $D_4$ (Hessian corank $2$), and only the origin on the zero level, as
+derived in Section~\ref{sec:point-under-perturbation}.
+
+\paragraph{New singular points.} Table~\ref{tab:singular-created} lists all
+perturbations that create singular points away from the origin.
+\begin{itemize}
+    \item \emph{Linear perturbations of the Fermat cones} reproduce
+          Proposition~\ref{prop:linear} exactly: $x+y$ and $x+z$ create two cusps
+          ($A_2$, multiplicity $2$) for $k<0$ only, at distance $\sqrt{2|k|/3}$,
+          i.e.\ with $\gamma=0.500$ (Figure~\ref{fig:cusps}); $x+y+z$ and $2x-y+3z$ create none; the
+          balanced perturbations create two ordinary double points. For $F_-$,
+          $x+z$ creates none, as the reflection~\eqref{eq:reflection} predicts.
+    \item \emph{The quadratic cone $x^2+y^2-z^2$} added to the Fermat cones
+          keeps the origin singular ($A_1$) and creates two further ordinary
+          double points moving linearly, $\gamma=1$, for both signs of $k$; for
+          the $D_4$ surface $x^2+y^3+z^3$ it creates one.
+    \item \emph{An inessential perturbation can move a singular point.} For
+          $x^2-y^2+z^3$ and $G=x+y$, $H_k=(x+y)(x-y+k)+z^3$ has its singular
+          point at $(-\frac k2,\frac k2,0)$: the cusp is translated with rate
+          $\gamma=1$, and the origin becomes regular.
+    \item \emph{$D_4$ with a linear perturbation.} For $x^2+y^3-3yz^2$ and
+          $G=y$, $k>0$, two ordinary double points appear with $\gamma=\frac12$:
+          the cubic part $y^3-3yz^2$ has three real lines, and $+ky$ separates
+          them (Figure~\ref{fig:d4-slice}).
+\end{itemize}
+
+
+\begin{figure}[!h]
+\centering
+
+\begin{tikzpicture}
+\begin{axis}[zeroset, width=0.36\textwidth, xmin=-0.18, xmax=0.18, ymin=-0.18, ymax=0.18,
+    xlabel={$x$}, ylabel={$y$}, title={$k=-0.01$}, xtick={-0.1,0,0.1}, ytick={-0.1,0,0.1}]
+\addplot[blue, thick] table[x=u, y=v] {data/slice_fermat_xy_m.dat};
+\addplot[only marks, mark=*, red, mark size=1.8pt] coordinates {(0.057735,-0.057735) (-0.057735,0.057735)};
+\end{axis}
+\end{tikzpicture}\hfill
+\begin{tikzpicture}
+\begin{axis}[zeroset, width=0.36\textwidth, xmin=-0.18, xmax=0.18, ymin=-0.18, ymax=0.18,
+    xlabel={$x$}, title={$k=0$}, xtick={-0.1,0,0.1}, ytick={-0.1,0,0.1}, yticklabels={}]
+\addplot[black, thick] table[x=u, y=v] {data/slice_fermat_xy_0.dat};
+\addplot[only marks, mark=*, red, mark size=1.8pt] coordinates {(0,0)};
+\end{axis}
+\end{tikzpicture}\hfill
+\begin{tikzpicture}
+\begin{axis}[zeroset, width=0.36\textwidth, xmin=-0.18, xmax=0.18, ymin=-0.18, ymax=0.18,
+    xlabel={$x$}, title={$k=+0.01$}, xtick={-0.1,0,0.1}, ytick={-0.1,0,0.1}, yticklabels={}]
+\addplot[teal, thick] table[x=u, y=v] {data/slice_fermat_xy_p.dat};
+\end{axis}
+\end{tikzpicture}
+\caption[Cusps of $F_++k(x+y)$]{The exact zero set of $F_++k(x+y)$ in the plane
+$z=0$. For $k<0$ the cone opens at the origin and two cusps appear at
+$(\pm s,\mp s,0)$, $s=\sqrt{-k/3}$ (red); for $k>0$ the surface is smooth.
+The slices are computed from the polynomial, not from a mesh.}
+\label{fig:cusps}
+\end{figure}
+
+%%INSERT singular-created.tex
+
+\begin{figure}[!h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[zeroset, width=0.5\textwidth, xmin=-0.18, xmax=0.18, ymin=-0.18, ymax=0.18,
+    xlabel={$y$}, ylabel={$z$}, legend pos=south east, xtick={-0.1,0,0.1}, ytick={-0.1,0,0.1}]
+\addplot[black, thick] table[x=u, y=v] {data/slice_d4_y_0.dat};
+\addlegendentry{$k=0$}
+\addplot[blue, thick] table[x=u, y=v] {data/slice_d4_y_p.dat};
+\addlegendentry{$k=0.004$}
+\addplot[only marks, mark=*, red, mark size=1.8pt, forget plot] coordinates {(0,0.036515) (0,-0.036515)};
+\end{axis}
+\end{tikzpicture}
+\caption[Two double points of a $D_4$ perturbation]{Slice $x=0$ of
+$x^2+y^3-3yz^2+ky=0$. For $k=0$ the slice consists of the three lines
+$y(y^2-3z^2)=0$ through the singular point. For $k>0$ the line $y=0$ and the
+hyperbola $y^2-3z^2=-k$ remain, and they cross at the two ordinary double
+points $(0,0,\pm\sqrt{k/3})$ (red), which converge to the origin with
+$\gamma=\frac12$.}
+\label{fig:d4-slice}
+\end{figure}
+
+
+In every case the multiplicities of all stationary points, real and complex,
+add up to the Milnor number of $F$. The number of singular points never exceeds
+it; the largest number observed is $3$ (origin plus two), against the bound $8$
+for the cones.
+
+\paragraph{A resolution limit of the count.} For $G=xy$ and the surfaces
+$x^2+y^3+z^3$, $x^2+y^3-3yz^2$ and $x^3+y^3+z^2+x^2$ the table entry ``some $k$''
+marks a stationary point that is reported as singular only for some values of
+$k$. For $x^2+y^3+z^3+kxy$ it is the second stationary point
+$(-\frac{k^3}{12},\frac{k^2}{6},0)$, at which $H_k=-k^6/432$. Its distance from
+the origin, $k^2/6$, gives the measured rate $\gamma\approx2$; for
+$|k|\lesssim0.008$ it is closer to the origin than the clustering radius
+$10^{-5}$ and is counted together with the origin, and its value, below
+$3\cdot10^{-15}$, is zero to within the tolerance of the search. Exactly, it is
+not a singular point of $S_k$. The count of stationary points is still
+complete; what the search cannot resolve is a point whose distance and value
+are both below its tolerances.
+
+% -----------------------------------------------------------------------------
+\section{Essential Directions}
+\label{sec:exp-essential}
+% PURPOSE: tests "the perturbation as a vector" (3.6): the essential
+% coordinates computed by the local algebra predict which perturbations only
+% move the surface.
+
+The second column of Tables~\ref{tab:detail-fermat}--\ref{tab:detail-d4}
+gives the essential coordinates of each perturbation. They predict the
+qualitative behaviour without any meshing.
+\begin{itemize}
+    \item A perturbation with zero essential part changes the surface only by
+          a coordinate change at first order. Every such perturbation in the
+          experiments has $\alpha=1$ (a translation or stretch of order $|k|$)
+          or, at first order, nothing: $G=F$. The exceptions are the
+          second-order effects of $A_1$ and $A_2$ (constant terms of order
+          $k^2$), which give $\alpha=1$ for $A_1$ and $\alpha=\frac23$ for the
+          spike of $A_2$.
+    \item For the $A_2$ surface $x^3+y^3+z^2+x^2$ the essential part of
+          $2x-y+3z$ is $-y$: only the cubic direction $y$ matters, the terms
+          $2x+3z$ lie in the Tjurina ideal. Accordingly the measured exponents
+          ($0.88$ for $k<0$, $0.53$ for $k>0$) are those of $G=y$ with the two
+          sides exchanged ($0.74$ and $0.50$), shifted towards $1$ by the
+          translation caused by $2x+3z$.
+    \item For the cones all linear perturbations are essential, which is why
+          they all give the rate $\frac12$; $x^2$ and the cubic perturbations are
+          inessential and give $1$.
+\end{itemize}
+
+% -----------------------------------------------------------------------------
+\section{Discriminant Directions}
+\label{sec:exp-sweep}
+% PURPOSE: the computed form of "G as a vector" for linear G: which directions
+% c create singular points, compared with the exact formula for the cones.
+
+Figure~\ref{fig:sweep} shows the direction sweep of linear perturbations at
+$k=-0.01$ for one surface of each type. The colour is the number of real
+stationary points near the origin; the black points are discriminant
+directions located by bisection, at which the search confirms a singular point
+of $S_k$. For $k=+0.01$ the maps are mirrored through the origin of the
+sphere ($c\mapsto-c$).
+
+\begin{figure}[!h]
+\centering
+\pgfplotsset{sweepmap/.style={width=0.5\textwidth, height=0.33\textwidth, xmin=-180, xmax=180, ymin=-1, ymax=1,
+    enlargelimits=false, axis on top, xtick={-180,-90,0,90,180}, ytick={-1,0,1},
+    xlabel={longitude of $c$ [deg]}, ylabel={$c_z$}, tick label style={font=\scriptsize},
+    label style={font=\scriptsize}, title style={font=\small}}}
+% The maps are images (one cell per grid direction, rendered from data/sweep_*.dat);
+% the discriminant directions are drawn on top by pgfplots.
+\begin{tikzpicture}
+\begin{axis}[sweepmap, title={$A_1$: $x^2+y^2-z^2+xyz$}]
+\addplot graphics[xmin=-180, xmax=180, ymin=-1, ymax=1] {data/sweep_A1.png};
+\addplot[only marks, mark=*, mark size=0.8pt, black] table[x=lon, y=height] {data/sweepb_A1.dat};
+\end{axis}
+\end{tikzpicture}\hfill
+\begin{tikzpicture}
+\begin{axis}[sweepmap, title={$A_2$: $x^2-y^2+z^3$}]
+\addplot graphics[xmin=-180, xmax=180, ymin=-1, ymax=1] {data/sweep_A2b.png};
+\addplot[only marks, mark=*, mark size=0.8pt, black] table[x=lon, y=height] {data/sweepb_A2b.dat};
+\end{axis}
+\end{tikzpicture}
+
+\begin{tikzpicture}
+\begin{axis}[sweepmap, title={$D_4$: $x^2+y^3-3yz^2$}]
+\addplot graphics[xmin=-180, xmax=180, ymin=-1, ymax=1] {data/sweep_D4b.png};
+\addplot[only marks, mark=*, mark size=0.8pt, black] table[x=lon, y=height] {data/sweepb_D4b.dat};
+\end{axis}
+\end{tikzpicture}\hfill
+\begin{tikzpicture}
+\begin{axis}[sweepmap, title={$\tilde E_6$: $x^3+y^3+z^3$}]
+\addplot graphics[xmin=-180, xmax=180, ymin=-1, ymax=1] {data/sweep_E6a.png};
+\addplot[only marks, mark=*, mark size=0.8pt, black] table[x=lon, y=height] {data/sweepb_E6a.dat};
+\end{axis}
+\end{tikzpicture}
+
+\smallskip
+{\footnotesize Number of real stationary points:\enspace
+\fcolorbox{black}{sw0}{\rule{0pt}{4pt}\rule{4pt}{0pt}}\,0\enspace
+\fcolorbox{black}{sw1}{\rule{0pt}{4pt}\rule{4pt}{0pt}}\,1\enspace
+\fcolorbox{black}{sw2}{\rule{0pt}{4pt}\rule{4pt}{0pt}}\,2\enspace
+\fcolorbox{black}{sw3}{\rule{0pt}{4pt}\rule{4pt}{0pt}}\,3\enspace
+\fcolorbox{black}{sw4}{\rule{0pt}{4pt}\rule{4pt}{0pt}}\,4\enspace
+\fcolorbox{black}{sw5}{\rule{0pt}{4pt}\rule{4pt}{0pt}}\,5\enspace
+\fcolorbox{black}{sw6}{\rule{0pt}{4pt}\rule{4pt}{0pt}}\,6\enspace
+\fcolorbox{black}{sw7}{\rule{0pt}{4pt}\rule{4pt}{0pt}}\,7\enspace
+\fcolorbox{black}{sw8}{\rule{0pt}{4pt}\rule{4pt}{0pt}}\,8}
+\caption[Direction sweep]{Directions $c$ of linear perturbations $G=c\cdot p$
+at $k=-0.01$, in the equal-area projection of the sphere. Colour: number of
+real stationary points of $H_k$ near the origin. Black: discriminant
+directions, for which $S_k$ has a singular point.}
+\label{fig:sweep}
+\end{figure}
+
+For the Fermat cone the map has the structure predicted by
+Proposition~\ref{prop:linear}. Real stationary points exist only in the octant
+$c_x,c_y,c_z>0$ (eight of them) and on its faces and edges (fewer), and the
+discriminant directions inside it are the curves
+$\sum\varepsilon_i c_i^{3/2}=0$. On the meridian through $(1,1,0)$ the bisection
+finds $c_z/c_x=1.587401052$, which is $2^{2/3}$ to the ten digits to which the
+boundary is located; for $F_-$ it finds $-2^{2/3}$. For the cones without a
+closed-form criterion it finds $x+y+2z$ for $x^3+y^3+z^3+xyz$ and
+$x+y+2.658063392z$ for $x^3+2y^3+3z^3+2xyz$. Used as perturbations, all four
+create two ordinary double points converging with $\gamma=\frac12$
+(Table~\ref{tab:singular-created}): the predictions of the sweep are confirmed by
+the independent family analysis.
+
+For the $A_1$ point the discriminant directions form the cone
+$c^{\top}A^{-1}c=0$ of Section~\ref{sec:vector} (perturbed at order $k$), a pair
+of circles on the sphere; for the other types the map is more intricate, and,
+unlike for the cones, it changes with $|k|$ (Proposition~\ref{prop:directions}
+applies only to homogeneous $F$).
+
+% -----------------------------------------------------------------------------
+\section{Geometric Accuracy of Marching Cubes}
+\label{sec:exp-accuracy}
+% PURPOSE: the baseline for the comparison of methods (assignment): how far
+% the Marching Cubes mesh is from the exact surface near the singular point,
+% and what it misses.
+
+Table~\ref{tab:extraction-error} shows the median extraction error, the
+Hausdorff distance between the mesh and the exact surface in the box. It
+decreases roughly in proportion to $h$ (order close to $1$) and stays below
+half a grid cell for most families. The median hides the failures near the
+singular points, which are the subject of this thesis.
+
+%%INSERT extraction_error.tex
+
+\paragraph{Missed features.} The largest errors occur where the surface has a
+feature thinner than a grid cell. For $x^2+y^2+z^3$ and $G=x+y$ at
+$|k|=0.0056$ the error is $0.025$ at resolution $128$, four grid cells: the spike
+of Section~\ref{sec:exp-rates} is entirely missing from the mesh, and the
+surface-to-mesh distance equals the height of the spike
+(Figure~\ref{fig:spike}). The mesh-to-surface distance of the same mesh is only
+$0.004$: every mesh point is close to the surface, but part of the surface is
+far from the mesh. A measure that only checks mesh points cannot detect this.
+
+\begin{figure}[!h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.62\textwidth, height=0.44\textwidth, xmode=log, ymode=log,
+    xlabel={$|k|$, $k<0$}, ylabel={distance}, legend pos=north west, legend cell align=left,
+    legend style={font=\scriptsize}, grid=major, grid style={gray!25}, unbounded coords=discard]
+\addplot[black, mark=*, mark size=1.3pt] table[x=absk, y=exact] {data/a2_x_neg_res128.dat};
+\addlegendentry{$d_a(S_k,S_0)$ (exact)}
+\addplot[red, mark=o, mark size=1.5pt] table[x=absk, y=surftomesh] {data/a2_x_neg_res32.dat};
+\addlegendentry{surface to mesh, $N=32$}
+\addplot[blue, mark=triangle, mark size=1.7pt] table[x=absk, y=surftomesh] {data/a2_x_neg_res128.dat};
+\addlegendentry{surface to mesh, $N=128$}
+\addplot[black, dashed, domain=1e-4:1e-2, samples=2] {(x^2/4)^(1/3)};
+\addlegendentry{spike height $(k^2/4)^{1/3}$}
+\end{axis}
+\end{tikzpicture}
+\caption[A missed feature]{$x^2+y^2+z^3+kx$: the exact deformation is the
+spike of height $(k^2/4)^{1/3}$. Where the surface-to-mesh distance coincides
+with it, the mesh misses the spike completely.}
+\label{fig:spike}
+\end{figure}
+
+\paragraph{Singular points.} At $k=0$ the singular point is the origin, a grid
+node, and every mesh contains it (distance $0$). The moving singular points
+are generally not grid nodes. Their distance to the mesh is up to $0.0106$ at
+resolution $32$ (the balanced perturbation of the Fermat cone), about half a
+cell, and decreases with $h$: $0.0064$ at $64$ and $0.0016$ at $128$. The mesh
+passes near the singular point but does not contain it, and the triangles
+around it describe a smooth surface, not a double point
+(Section~\ref{sec:voxel-consequences}).
+
+\begin{figure}[!h]
+    \centering
+    \begin{subfigure}{0.47\textwidth}\centering
+        \thesisimage{pictures/ch5/balanced_mesh_32.png}{\textwidth}{4.5cm}{$F_+ + k(x+y+1.5874z)$, $k=-0.0032$, resolution 32, zoom on one of the two double points (mark the exact point)}
+        \caption{resolution $32$}\end{subfigure}\hfill
+    \begin{subfigure}{0.47\textwidth}\centering
+        \thesisimage{pictures/ch5/balanced_mesh_128.png}{\textwidth}{4.5cm}{same family, $k$ and view, resolution 128}
+        \caption{resolution $128$}\end{subfigure}
+    \caption[Mesh near a moving singular point]{Marching Cubes near an ordinary
+    double point that is not a grid node. The exact singular point is marked;
+    the mesh does not contain it.}
+    \label{fig:mesh-singular}
+\end{figure}
+
+% -----------------------------------------------------------------------------
+\section{Self-Similarity}
+\label{sec:exp-self-similarity}
+% PURPOSE: a visual test of Proposition 3.2 (exact self-similarity).
+
+For $F_++kx$ Proposition~\ref{prop:self-similar} gives $S_k=\sqrt{|k|}\,M_\sigma$
+exactly. The zero sets for $k=0.01$, $0.04$ and $0.16$ must therefore be identical after
+dividing the coordinates by $\lambda=\sqrt k$, which doubles from one value to
+the next (Figure~\ref{fig:self-similar}). The same test can be made in the
+viewer: extracting the three surfaces on the domains of half-size $0.4$, $0.8$
+and $1.6$ with the same resolution gives identical meshes.
+
+\begin{figure}[!h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[zeroset, width=0.55\textwidth, xmin=-4, xmax=4, ymin=-4, ymax=4,
+    xlabel={$x/\sqrt{k}$}, ylabel={$y/\sqrt{k}$}, legend pos=south west]
+\addplot[blue, line width=2.4pt, opacity=0.35] table[x=u, y=v] {data/slice_selfsim_a.dat};
+\addlegendentry{$k=0.01$}
+\addplot[red, line width=1.2pt] table[x=u, y=v] {data/slice_selfsim_b.dat};
+\addlegendentry{$k=0.04$}
+\addplot[black, densely dashed, thin] table[x=u, y=v] {data/slice_selfsim_c.dat};
+\addlegendentry{$k=0.16$}
+\end{axis}
+\end{tikzpicture}
+\caption[Self-similarity]{Slices $z=0$ of $F_++kx=0$ for three values of $k$,
+drawn in the rescaled coordinates $p/\sqrt{k}$. The three curves coincide, as
+Proposition~\ref{prop:self-similar} states: $S_k=\sqrt{k}\,M_+$.}
+\label{fig:self-similar}
+\end{figure}
+
+% -----------------------------------------------------------------------------
+\section{Limitations}
+\label{sec:exp-limitations}
+% PURPOSE: what the results do not show.
+
+\begin{itemize}
+    \item The exact distances are upper bounds that are attained when a start of
+          the Lagrange iteration lies in the right basin. Near degenerate singular
+          points ($D_4$) the iteration fails and the measurement has a floor of
+          about $1.5\cdot10^{-4}$ in the box of half-size $0.18$.
+    \item The rate fits cover two decades of $|k|$. Where two effects of
+          different order combine, the fitted slope is not yet the asymptotic
+          one, although its confidence interval is narrow.
+    \item The certificate of completeness is numerical: it relies on distinct
+          stationary points being farther apart than $10^{-5}$, which fails for
+          the second stationary point of $x^2+y^3+z^3+kxy$.
+    \item All singular points studied are at the origin, which is a grid node.
+          A singular point between grid nodes is not represented by any mesh
+          vertex, as the moving singular points show; this is the case the
+          singularity-aware method has to handle.
+    \item Only Marching Cubes has been evaluated so far.
+\end{itemize}
+
+% -----------------------------------------------------------------------------
+\section{Comparison with Other Methods (Planned)}
+\label{sec:exp-comparison}
+% PURPOSE: placeholder for the comparison required by the assignment.
+
+\begin{center}
+\fbox{\parbox{0.92\textwidth}{\small\textbf{Work in progress.} The comparison
+of Marching Cubes with Marching Tetrahedra, Dual Contouring and the method of
+Section~\ref{sec:method-singularity-aware} has not been carried out yet. This
+section lists what will be measured.}}
+\end{center}
+
+For every method and every family of Section~\ref{sec:exp-setup}, the
+measurements of Section~\ref{sec:method-accuracy} will be repeated on the
+method's mesh: the extraction error, the surface-to-mesh distance (missed
+features), the distance from the singular points to the mesh, and the
+topological checks of Section~\ref{sec:method-singularity-aware}. Since the
+measurement pipeline accepts any triangle mesh, the results of
+Table~\ref{tab:extraction-error} and Figure~\ref{fig:spike} are the Marching
+Cubes column of that comparison.
+
+% -----------------------------------------------------------------------------
+\section{Conclusions}
+\label{sec:exp-conclusions}
+
+The experiments answer the questions of Chapter~\ref{ch:theory} for all ten
+reference surfaces.
+\begin{enumerate}
+    \item \textbf{Rates.} The local Hausdorff distance between the exact
+          surfaces decreases like $|k|^\alpha$ with $\alpha$ in the range
+          predicted by the scaling principle in $253$ of $268$ cases; for
+          homogeneous $F$ and $G$ the rate is exact, $\alpha=1/(d-m)$. The
+          remaining cases are explained by combined essential and inessential
+          parts, or by deformations below the resolution of the measurement.
+    \item \textbf{Singular points.} The fate of the singular point is decided by
+          $G(0)$ and $\nabla G(0)$; new singular points appear exactly where the
+          theory predicts them, with the predicted type and rate, and their
+          number never exceeds the Milnor number. All counts are certified.
+    \item \textbf{Directions.} The essential coordinates of $G$ predict which
+          perturbations only move the surface, and the direction sweep locates
+          the perturbations that create singular points; the located balanced
+          perturbations behave as predicted.
+    \item \textbf{Extraction.} Marching Cubes represents the surfaces with an
+          error of order $h$ away from the singular points, but it misses
+          features thinner than a cell that start at stationary points, and it
+          never contains singular points that are not grid nodes. These are the
+          two failures that the singularity-aware method of
+          Section~\ref{sec:method-singularity-aware} is designed to remove.
+\end{enumerate}

@@ -1,0 +1,58 @@
+Hi, lets look closer to the experiments:
+5.1 The ordinary double point in paragraph Everything eelse gives alpha=1 mentioned O(k) but i dont know what that is
+5.2 The cusp also mentions O(|k|). What means the no in the table 3 under agrees??
+5.5 The D4 point has paragraph Insessential x and it basically says nothing
+I dont know, sometimes there is too much said sometimes too little
+5.8 The fermat cone x^3+y^3-z^3 i deleted the figure 18 cause i diidnt want it there anymore, can you change the text accordingly please?
+I kinda dont like the text about the experiments, sometimes there is so much text, and sometimes so little, can it be somehow unified? I get that the more/less text is according to the importance but still it feels weird
+
+7.1 the direction sweep is necesary? 
+\label{fig:r-sweep} is not pretty nor understandable, can it be deleted or replaced with something more intuitive?
+
+And now the bigger and more important part:
+The linear interpolation: Maybe i just dont get it but why it cant be like this: Lets take only small box around the P, compute S+epsilon and S-epsilon, at the same grid resolution. The all values on vertices of the cubes (used in MC algorithm) will be computed by linear interpolation (1/2) S+epsion + (1/2) S-epsilon ?? this should equal to S0 or? I see that it is done like this and the singularity is preserved and that is why this approach is not correct?
+Can a button that will do the linear interpolation based on 2 surfaces be implemented? And maybe even i can choose with which interpolation approach it will be drawn?(averaging implicit function values on the voxel grids, vertex interpolation on extracted meshes, exact vertex interpolation, SDF)
+Can another method be tried and tested so a better (the best please, help yourself with already existing ones) results will be obtained? So basicaly the future work of linear interpolation: Beyond linear interpolation. The interpolation experiment of Section 10 shows that linear interpolation between S−ε and S+ε reconstructs S0 to second order away from the singular point, but not near it. Two directions follow from this. First, a reconstruction that uses the known local structure near P : the model surfaces of Section 2.6 for both signs of k could be fitted to S±ε near P , the scale λ(ε) removed, and only the part away from P interpolated. Second, correspondences other than the closest point (for example along the gradient flow of F , or from a common parametrisation), which may avoid the folded triangles of the vertex interpolation
+
+Here is the annotation (Thesis_01/zadanie-zp_209582.pdf) so i think the interpolation should be developed further. 
+
+
+I've put the report into main.tex as three new chapters plus an unnumbered Conclusion. It now runs Introduction → Ch. 1–2 (yours) → Ch. 3 theory → Ch. 4 method → Ch. 5 results → Conclusion with a "Future Work" part.
+
+Written for: your supervisor and the thesis examiners (mathematics / computer graphics readers).
+
+**Important:** there is no LaTeX installed on this Mac, so I couldn't compile it. Instead a script checked that every reference has a label, every `\cite` key is in bibliography.bib, all 93 image/data paths exist, every environment is closed, and there is no `\paragraph`. All of that passes. Please compile once and send me any errors. Also, `Thesis_01` is excluded from git, so I saved your exact previous version as `Thesis_01/main_before_ch3-5.tex`.
+
+**What's in main.tex now**
+- **Ch. 1–2:** your written text is unchanged. I only filled the two empty spots:
+  - **Sec. 1.3:** isolated singular points, the Morse lemma, Milnor/Tjurina numbers, normal forms, and the conic structure theorem.
+  - **Sec. 2.5:** normals, Hausdorff distance, Euler characteristic, and why Marching Cubes fails at a singular point. Its title "Differential Properties in Polygonization" no longer fits well. Shall I rename it, e.g. to "Quality of Polygonization Near Singular Points"?
+- **Ch. 3 Perturbations of Isolated Singularities:** your report text, made formal with definitions, propositions and proofs. O(|k|) is now properly defined.
+- **Ch. 4 Singularity-Aware Extraction:**
+  - interpolation, with a short proof of why averaging the grid values only gives back F (the question from your notes);
+  - the weighted cone patch, with a proposition, a proof and an algorithm box;
+  - the class of surfaces it works on (semi-quasihomogeneous), which is what the annotation asks for;
+  - how everything was measured.
+- **Ch. 5 Experimental Results:** one surface per type in full detail: x²+y²−z²+xyz, x²+y²+z³, x²+y³−3yz² and x³+y³+z³. I picked the three-line D4 surface because it's the one where Marching Cubes gets the topology wrong. The other six surfaces each get a short paragraph, and the summary tables still cover all ten. I took the tables directly from report.tex, so the numbers are unchanged. The m(c) sweep figure you didn't like is replaced by a few sentences.
+- **Text changes:** I kept your wording wherever it was correct and made the four discussions in Ch. 5 follow the same structure and similar length.
+
+**Errors I found in report.tex (fixed in the thesis, not in report.tex)**
+1. **D4 x²+y³+z³ with G = x²+y²−z²:** "4 = 1+1+2, the last two complex" is wrong. All four stationary points are real; two of them just aren't on the surface.
+2. **Same surface, called a "sharp crease":** it's actually a smooth fold over the line y = −z, singular only at P.
+3. **Self-similarity:** this holds only "for each sign of k" separately.
+4. **Saddle cusp:** "k/2 is a sixth of a grid cell" doesn't hold at N=128, where it's 0.8 of a cell. Please check which grid that snapshot used.
+5. **Bibliography:** the author of `arnold2012singularities` was "Arnold, Elionora"; I corrected it to Vladimir I. Arnold. I also added 7 new entries (marked at the end of the .bib); please check them before submission.
+
+**Is it enough?** Mostly yes, but there is one real gap. The annotation says to compare the method with existing algorithms, plural, and right now it's only compared with Marching Cubes. I'd add three comparisons on the same surfaces and measures:
+1. Dual Contouring.
+2. Marching Cubes 33 / Lewiner.
+3. Simply refining the grid near P. A reviewer will ask "why not just use a finer grid?"
+
+Still to write: the Introduction (00-intro.tex is empty), the Abstract/Abstrakt and the Acknowledgement.
+
+**Figures I'd add**
+- a TikZ diagram of the cone patch (box, loop, rings, P), which I can draw;
+- viewer screenshots of the patch on the horn and on the three-line D4 surface;
+- one log–log plot of d(k) showing how α is fitted.
+
+All of this is also in a commented-out notes block at the end of main.tex, so it won't show in the PDF.

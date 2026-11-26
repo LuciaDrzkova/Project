@@ -1,0 +1,178 @@
+
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+\geometry{margin=2.5cm}
+
+\title{Singularity-aware Isosurface Extraction\\
+Preliminary Thesis Structure and Motivation}
+\author{Master Thesis Draft}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section*{Proposed Thesis Structure}
+
+\subsection*{Chapter 1 -- Implicit Surfaces and Singularities}
+
+This chapter should establish the mathematical background required for singularity-aware isosurface extraction. 
+Instead of presenting implicit surfaces only from the geometric point of view, the chapter can be structured as a bridge between algebraic geometry, differential geometry, and geometric modeling.
+
+\subsubsection*{1.1 Implicit Surfaces}
+\begin{itemize}
+    \item Definition of implicit surfaces:
+    \[
+    f(x,y,z)=0
+    \]
+    \item Difference between explicit, parametric, and implicit representations.
+    \item Advantages of implicit representations:
+    \begin{itemize}
+        \item topological flexibility,
+        \item easy inside/outside testing,
+        \item natural representation of complex geometry,
+        \item suitability for voxel methods.
+    \end{itemize}
+    \item Types of implicit surfaces:
+    \begin{itemize}
+        \item algebraic surfaces,
+        \item signed distance fields,
+        \item procedural implicit surfaces,
+        \item neural implicit representations.
+    \end{itemize}
+\end{itemize}
+
+\subsubsection*{1.2 Differential and Algebraic Properties}
+\begin{itemize}
+    \item Gradient and normal vector:
+    \[
+    \nabla f(x,y,z)
+    \]
+    \item Tangent planes and local smoothness.
+    \item Curvature and local geometric behavior.
+    \item Critical points and degenerate regions.
+    \item Relationship between algebraic multiplicity and geometric behavior.
+\end{itemize}
+
+\subsubsection*{1.3 Singularities of Implicit Surfaces}
+\begin{itemize}
+    \item Definition of singular points:
+    \[
+    \nabla f(x,y,z)=0
+    \]
+    \item Geometric interpretation of singularities.
+    \item Types of singular behavior:
+    \begin{itemize}
+        \item cusps,
+        \item self-intersections,
+        \item pinch points,
+        \item swallowtail-like degeneracies,
+        \item higher-order contact regions.
+    \end{itemize}
+    \item Local versus global singular structures.
+    \item Numerical difficulties caused by singularities during polygonization.
+\end{itemize}
+
+\subsubsection*{1.4 Blowup and Resolution of Singularities}
+\begin{itemize}
+    \item Motivation for desingularization.
+    \item Geometric interpretation of blowup in $\mathbb{R}^3$.
+    \item Local coordinate transformations.
+    \item Resolution of singular points through local lifting.
+    \item Relation between blowup and local topology preservation.
+\end{itemize}
+
+\subsubsection*{1.5 Unfolding and Stability}
+\begin{itemize}
+    \item Perturbation of singular structures.
+    \item Stable and unstable singularities.
+    \item Unfolding as local deformation analysis.
+    \item Connection between unfolding and numerical robustness.
+\end{itemize}
+
+\subsection*{Chapter 2 -- Numerical Isosurface Extraction}
+
+This chapter should focus on the computational and numerical aspects of extracting polygonal surfaces from scalar fields.
+
+\subsubsection*{2.1 Voxel Grids and Scalar Fields}
+\begin{itemize}
+    \item Sampling of implicit functions.
+    \item Uniform and adaptive voxel grids.
+    \item Interpolation inside volumetric cells.
+    \item Numerical precision issues near singular points.
+\end{itemize}
+
+\subsubsection*{2.2 Marching Cubes}
+\begin{itemize}
+    \item Cell classification.
+    \item Binary cube configurations.
+    \item Edge interpolation.
+    \item Ambiguities and topological inconsistencies.
+    \item Failure cases near singularities.
+\end{itemize}
+
+\subsubsection*{2.3 Marching Tetrahedra}
+\begin{itemize}
+    \item Tetrahedral decomposition.
+    \item Reduction of ambiguous configurations.
+    \item Comparison with Marching Cubes.
+    \item Numerical and topological properties.
+\end{itemize}
+
+\subsubsection*{2.4 Dual Contouring}
+\begin{itemize}
+    \item Dual grid construction.
+    \item Hermite data:
+    \begin{itemize}
+        \item intersection points,
+        \item normals,
+        \item gradient estimation.
+    \end{itemize}
+    \item Quadratic Error Function (QEF).
+    \item Sharp feature preservation.
+    \item Behavior near degenerate regions.
+\end{itemize}
+
+\subsubsection*{2.5 Differential Properties in Polygonization}
+\begin{itemize}
+    \item Normal continuity.
+    \item Curvature-sensitive reconstruction.
+    \item Topological correctness.
+    \item Geometric error metrics.
+\end{itemize}
+
+\subsection*{Future Chapters}
+\begin{itemize}
+    \item Detection of singular structures in sampled scalar fields.
+    \item Voxel-based singularity-aware extraction algorithm.
+    \item Experimental evaluation.
+    \item Comparison with existing methods.
+    \item Geometric and topological validation.
+\end{itemize}
+
+\newpage
+
+\section*{Preliminary Thesis Motivation and Research Direction}
+
+The extraction of isosurfaces from volumetric scalar fields represents one of the fundamental problems in geometric modeling, scientific visualization, and computer graphics. Classical polygonization algorithms such as Marching Cubes and Marching Tetrahedra have become standard techniques due to their computational efficiency and simplicity. However, these methods are primarily designed for smooth scalar fields and often fail to correctly represent regions where the underlying implicit surface contains singularities or degenerate geometric structures.
+
+Singular points introduce both geometric and numerical difficulties. In the neighborhood of a singularity, the gradient of the defining function may vanish, causing instability in normal estimation, ambiguity in local topology, and loss of geometric detail. Standard voxel-based approaches may generate disconnected components, incorrect triangulations, or artificial smoothing that destroys important structural information. This issue becomes especially important when singularities carry meaningful geometric or physical information, for example in algebraic surfaces, procedural modeling, or scientific datasets.
+
+The goal of this thesis is to investigate singularity-aware extraction of implicit surfaces represented by polynomial scalar fields. The work focuses on the development of a voxel-based method capable of preserving the local structure of singular regions while maintaining geometric accuracy and topological correctness. Instead of treating singularities as numerical artifacts, the thesis approaches them as intrinsic geometric features that should be identified and modeled explicitly.
+
+The first part of the thesis studies implicit surfaces from both differential and algebraic perspectives. Particular attention is devoted to the characterization of singular points using gradient analysis and local algebraic structure. Unlike approaches focused exclusively on ADE classification, the thesis aims to investigate singularities through geometric behavior in $\mathbb{R}^3$, emphasizing their influence on numerical reconstruction. This includes studying local degeneracies, tangent behavior, multiplicity, and stability under perturbations.
+
+An important theoretical component of the thesis is the investigation of blowup and unfolding techniques. Blowup methods provide a mechanism for resolving singular structures by lifting the local geometry into higher-dimensional coordinate representations. Although these methods originate in algebraic geometry and dynamical systems, they provide valuable intuition for understanding how local topology changes near degenerate regions. Similarly, unfolding theory offers a framework for analyzing the stability of singularities under perturbations, which is closely connected to numerical robustness in discretized voxel representations.
+
+The numerical part of the thesis focuses on existing isosurface extraction methods and their behavior near singularities. Marching Cubes, Marching Tetrahedra, and Dual Contouring will be analyzed not only algorithmically but also mathematically. The work will investigate interpolation schemes, ambiguity resolution, Hermite data estimation, and optimization procedures such as Quadratic Error Functions. Special emphasis will be placed on identifying why these algorithms fail in singular regions and which differential properties influence reconstruction quality.
+
+Based on this analysis, the thesis aims to design a singularity-aware voxel extraction framework capable of detecting problematic regions and adapting reconstruction locally. The proposed method should preserve characteristic geometric structures while avoiding topological artifacts introduced by classical polygonization techniques. Experimental evaluation will include algebraic test surfaces with known singular behavior and comparison against existing approaches using geometric and topological quality metrics.
+
+The expected contribution of the thesis is therefore twofold. First, it provides a unified overview connecting algebraic singularity theory with practical isosurface extraction algorithms. Second, it proposes a computational framework for more faithful reconstruction of singular implicit surfaces, with applications in geometric modeling, visualization, and scientific computing.
+
+\end{document}

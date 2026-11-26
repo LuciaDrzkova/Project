@@ -1,0 +1,48 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[slovak]{babel}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{geometry}
+\usepackage{hyperref}
+
+\geometry{margin=2.5cm}
+
+\title{\textbf{Master's Thesis Project Description:}\\ Singularity-Aware Isosurface Extraction}
+\author{Candidate for Master of Science}
+\date{May 2026}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction and Motivation}
+The extraction of isosurfaces from implicit functions $f(x, y, z) = 0$ is a cornerstone of computer graphics, medical imaging, and scientific visualization. While standard algorithms such as \textit{Marching Cubes} (MC) or \textit{Dual Contouring} (DC) perform adequately for smooth manifolds, they fundamentally break down in the presence of \textbf{singularities}—points where the gradient $\nabla f$ vanishes. 
+
+At these points, the surface may self-intersect, branch, or form cusps. Standard piecewise-linear approximations typically "smooth over" these features, leading to topological errors (e.g., incorrect genus or broken connectivity). This thesis proposes a voxel-based extraction method that is mathematically "aware" of these singularities, utilizing techniques from algebraic geometry to ensure both geometric precision and topological fidelity.
+
+\section{Mathematical Scope}
+This research moves beyond simple mesh optimization by incorporating the theory of \textbf{Resolution of Singularities}. The core of the work involves:
+
+\begin{itemize}
+    \item \textbf{Identification:} Developing robust numerical criteria to distinguish between high-curvature regions and true algebraic singularities using the Hessian of the implicit field.
+    \item \textbf{Blow-ups and Unfoldings:} In $\mathbb{R}^3$, a singularity can often be understood by lifting the problem into a higher-dimensional space or by applying a "blow-up" transformation. We will explore how these algebraic tools can guide the subdivision of voxels to "unfold" the surface logic before triangulation occurs.
+    \item \textbf{Hermite Data Integration:} Leveraging gradients and second-order derivatives to position vertices in a way that respects the non-manifold nature of singular points.
+\end{itemize}
+
+\section{Methodology}
+The proposed algorithm will utilize an adaptive voxel grid (Octree). Unlike standard adaptive methods that refine based on curvature, our approach will refine based on the \textbf{singular set likelihood}. 
+
+Within "singular voxels," the algorithm will not assume a single manifold sheet. Instead, it will analyze the polynomial behavior to determine the local topology. This allows for the generation of non-manifold meshes (edges shared by more than two faces) which are necessary to accurately represent self-intersecting algebraic surfaces.
+
+\section{Justification for Master's Level Research}
+This project is "Master's worth" because it transitions from purely heuristic mesh processing to a rigorous hybrid of \textbf{Computational Algebraic Geometry} and \textbf{Numerical Analysis}. 
+\begin{enumerate}
+    \item It requires a deep understanding of the differential properties of $\mathbb{R}^3$ surfaces.
+    \item It involves the implementation of a novel voxel-based algorithm that outperforms industry-standard libraries in specific algebraic cases.
+    \item It provides a formal classification of the "Reliable Class" of surfaces, providing a theoretical guarantee of correctness that is often missing in graphics literature.
+\end{enumerate}
+
+\section{Expected Outcomes}
+The final result will be a software implementation capable of extracting complex algebraic surfaces (e.g., the Cayley Cubic or the Whitney Umbrella) with high topological accuracy. The performance will be evaluated against standard Dual Contouring and Marching Tetrahedra using Hausdorff distance metrics and Betti number verification.
+
+\end{document}

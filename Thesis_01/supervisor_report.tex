@@ -1,0 +1,374 @@
+% Progress report for the supervisor. Compile with pdflatex + bibtex.
+\documentclass[11pt, a4paper]{article}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 														%
+%  					 Basic formatting 					%
+% 														%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Page margins
+\usepackage[top=2.5cm, bottom=2.5cm, right=2cm, left=3.5cm]{geometry}
+
+% Line height
+\linespread{1.5}
+
+% !!! optional !!!  no hyphenation
+\tolerance=100000000
+\hyphenpenalty 10000000
+\exhyphenpenalty 10000000
+
+% Insert pdf
+\usepackage{pdfpages}
+
+% Charset
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
+% Common packages (math fonts, floats etc.)
+\usepackage{amsthm}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{float}
+\usepackage{array}
+\usepackage{pdflscape}
+\usepackage{calc}
+\usepackage[linesnumbered, ruled]{algorithm2e}
+\usepackage{caption}
+\usepackage{tikz}
+\usepackage{graphicx}
+\usepackage{comment}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{adjustbox}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 													 %
+%  					Optional formatting 				 %
+% 													 %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Theorems
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+
+% Definitions and examples
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+
+% Remarks
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+% !!! optional !!!  Basic caption formatting
+\theoremstyle{definition}
+%\newtheorem{definition}{Definition}[section]
+
+\usepackage{caption}
+\captionsetup[figure]{labelfont=bf}
+\captionsetup[table]{labelfont=bf}
+
+
+% !!! optional !!! package for drawing graphs
+\usepackage{pgfplots}
+\pgfplotsset{width=14cm, height=10cm, compat=1.9}
+
+
+% !!! optional !!! package for displaying a code
+\usepackage{listings}
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.8,0.8,0.7}
+\definecolor{myteal}{rgb}{0.17,0.57,0.69}
+\definecolor{whitish}{rgb}{0.99, 0.99, 0.98}
+\definecolor{mauve}{rgb}{0.58,0,0.82} % used by \lstset (was undefined)
+
+\lstset{frame=tb,
+  backgroundcolor=\color{whitish},
+  language=C++,
+  aboveskip=3mm,
+  belowskip=0mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\footnotesize\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{dkgreen},
+  stringstyle=\color{mauve},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3,  
+  emph={int,char,double,float,unsigned,void,bool,MyMesh, VertexIter, VertexVertexCCWIter, std, vector, VertexHandle, vec, AngleOf, max, min} ,
+  emphstyle={\color{teal}},
+  captionpos=b,
+  frame=single,	
+  rulecolor=\color{gray}
+}
+\renewcommand{\lstlistingname}{Code excerpt}
+\captionsetup[lstlisting]{labelfont=bf}
+\renewcommand\lstlistlistingname{Source codes}
+
+% Image, or a framed placeholder while the file does not exist yet.
+%   #1 file, #2 width, #3 placeholder height, #4 what the image must show
+\newcommand{\thesisimage}[4]{%
+  \IfFileExists{#1}{\includegraphics[width=#2]{#1}}{%
+    \fbox{\parbox[c][#3][c]{#2}{\centering\footnotesize
+      \textbf{Image placeholder}\\[2pt]\texttt{\detokenize{#1}}\\[4pt]#4}}}}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 														%
+%  			 Information about the author 				%
+% 														%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\def\skola{Comenius University in Bratislava}  % Name of the university
+\def\fakulta{Faculty of Mathematics, Physics and Informatics} % Name of the faculty
+\def\autor{Lucia Držková} % Name of the author
+
+
+
+\newcommand{\panel}[1]{\includegraphics[width=0.22\textwidth]{pictures/report/exact/#1}}
+
+\begin{document}
+
+\begin{center}
+{\Large\bfseries Singularity-aware isosurface extraction}\\[6pt]
+%{\large Progress report}\\[6pt]
+%\autor\\[2pt]
+%{\small\fakulta, \skola}\\[2pt]
+%{\small\today}
+\end{center}
+
+\section*{Summary}
+
+We study one-parameter families $S_k=\{F+kG=0\}$ where $\{F=0\}$ has an isolated singular point $P=0$ and we want to understand how $S_k$ approaches $S_0$ as $k\to0$ what happens to the singular point and what a voxel grid using the Marching Cubes method can capture. We looked at ten surfaces of types $A_1$, $A_2$ $D_4$ and $\tilde E_6$. Each was combined with fifteen perturbations making one hundred forty-five pairs. Each pair was computed for eighteen values of $k$ at three grid resolutions. The main findings are:
+\begin{enumerate}
+\item The rate of convergence $d(k)\sim C|k|^\alpha$ is predicted by a scaling argument. 253 out of 268 measured one-sided rates match this prediction. The remaining 15 cases are explained—either by two effects of different orders within the measured range or by deformations too small to be seen at the measurement resolution.
+
+\item When both $F$ and $G$ are homogeneous (as in the case of cones) the family is exactly self-similar and the convergence rate is exactly $1/(3-m)$ where $m$ is the order of $G$.
+
+\item What happens at the point $P$ depends on the value of $G(P)$ and the gradient of $G$ at $P$ ($\nabla G(P)$). Whether new singular points emerge depends on the essential part of $G$—that is, its class in the Tjurina algebra—and on the direction of $G$. The number of new singular points never exceeds the Milnor number and all counts were confirmed by it.
+
+\item The Marching Cubes algorithm is accurate—with an error of order $O(h)$—in regions away from singular points; however, it fails to capture features thinner than a single cell that originate at stationary points, and it never includes singular points that do not coincide with grid nodes.
+
+\end{enumerate}
+
+% =============================================================================
+\section{Setting}
+Let $H_k=F+kG$, where $F(0)=0$, $\nabla F(0)=0$, and Milnor number
+$\mu(F)=\dim\mathcal O/(\nabla F)<\infty$. Convergence is measured using the local
+Hausdorff distance within the cube $Q=[-0.18,0.18]^3$,
+\[
+d(k)=\max\Big\{\sup_{p\in S_k\cap Q}\operatorname{dist}(p,S_0),\ \sup_{p\in S_0\cap Q}\operatorname{dist}(p,S_k)\Big\},
+\]
+where the relation $d(k)\sim C|k|^\alpha$ is considered separately for $k<0$ and $k>0$; the singular points
+$q(k)$ of the set $S_k$ converge with a rate $\gamma$ if $\|q(k)\|\sim c|k|^\gamma$.
+
+\paragraph{Surfaces.} $x^2+y^2-z^2+xyz$ ($A_1$, $\mu=1$); $x^2+y^2+z^3$,
+$x^2-y^2+z^3$, $x^3+y^3+z^2+x^2$ ($A_2$, $\mu=2$); $x^2+y^3+z^3$, $x^2+y^3-3yz^2$
+($D_4$, $\mu=4$); $x^3+y^3\pm z^3$, $x^3+y^3+z^3+xyz$, $x^3+2y^3+3z^3+2xyz$
+($\tilde E_6$, $\mu=8$). All of these are quasihomogeneous, so $\tau=\mu$. 
+\paragraph{Perturbations.} $1$; $x,y,z,x+y,x+z,x+y+z,2x-y+3z$; $x^2$, $x^2+y^2-z^2$,
+$xy$; $x^3$, $x^2y+y^2z+z^2x$; $G=F$ (check: $S_k=S_0$); and for each cone,
+a \emph{balanced} linear perturbation determined via a directional sweep (Section~\ref{sec:s-sweep}).
+% =============================================================================
+\section{Theoretical predictions}
+\paragraph{At a singular point.} $H_k(0)=kG(0)$ and $\nabla H_k(0)=k\nabla G(0)$:
+for $k\neq0$, the point $P$ leaves the set $S_k$ if $G(0)\neq0$; it becomes a regular point if
+$G(0)=0\neq\nabla G(0)$; and it remains singular if the order of the function $G$ is at least two,
+with its type being determined by the Hessian $\operatorname{Hess}F(0)+k\operatorname{Hess}G(0)$.
+
+\paragraph{Scaling.} Let $F$ be a quasihomogeneous function with weights $w$, and let
+$d_w(G) < 1$ be the weighted degree of the function $G$. These two terms balance at the internal scale
+$\lambda = |k|^{1/(1-d_w(G))}$; in the coordinates $u_i = p_i/\lambda^{w_i}$, this family
+converges to the model surface $\{F + \operatorname{sign}(k)G_w = 0\}$. This implies the estimate
+\[
+\frac{w_{\min}}{1-d_w(G)} \le \alpha \le \frac{w_{\max}}{1-d_w(G)} \qquad (\text{with an upper bound of } 1).
+\]
+\emph{Proposition (exact case).} If $F$ is a homogeneous function of degree $d$ and $G$ is
+a homogeneous function of degree $m < d$, then $S_k = \lambda M_\sigma$, where $\lambda = |k|^{1/(d-m)}$
+and $M_\sigma = \{F + \sigma G = 0\}$ with $\sigma = \operatorname{sign} k$. Since $S_0$ is a cone,
+we have $d_a(S_k, S_0) = \lambda d_{a/\lambda}(M_\sigma, S_0) \to C_\sigma \lambda$, which implies that
+$\alpha = 1/(d-m)$ exactly, where $C_\sigma$ is the Hausdorff distance between $M_\sigma$ and this cone.
+This rescaling corresponds to a weighted "blow-up" at the point $(p, k) = (0, 0)$ in the chart $\bar k = \pm 1$.
+
+\paragraph{Essential part.} If $G\in(F,\partial_xF,\partial_yF,\partial_zF)$, then $F+kG$ is—up to first-order terms in $k$, a coordinate transformation of the function $F$ (multiplied by a unit); thus, $G$ merely shifts the surface. The class of the element $G$ in the Tjurina algebra, expressed in a monomial basis, represents its \emph{essential part}; it is precisely this part that alters the singularity at the first order.
+
+\paragraph{Calculation.} Conservation of the Milnor number: the stationary points of the function $H_k$ in the vicinity of the origin (both real and complex), counted with multiplicity, sum to the value $\mu(F)$ \cite{milnor1968singular,greuel2007introduction}. It follows that at most $\mu$ singular points arise; a search in which the total multiplicity reaches $\mu$ can therefore be considered complete.
+
+\paragraph{Linear perturbations of diagonal cones.} For $F=\sum a_ix_i^3$ and $G=\sum c_ix_i$, the relation $H_k=\tfrac{2k}{3}G$ holds at every stationary point. Consequently, the surface $S_k$ is singular if and only if $\sum\pm c_i|c_i/a_i|^{1/2}=0$ (for an appropriate choice of signs). Singular points are located at a distance of $\sqrt{|k|/3}(\sum|c_i/a_i|)^{1/2}$ ($\gamma=\tfrac12$) and are of type $A_1$ (if all $c_i\neq0$) or of type $A_2$ (if one $c_i=0$).
+
+% =============================================================================
+\section{Numerical method}
+
+\begin{itemize}
+\item $|k|\in[10^{-4},10^{-2}]$, with nine values distributed on a log-scale on each side; the Marching Cubes algorithm
+is applied in the domain $[-0.4,0.4]^3$ with resolutions $N=32, 64, 128$.
+\item $d(k)$ between \emph{exact} surfaces: grid points (as well as points
+on nested, finer grids in the vicinity of point $P$ and near stationary points) are projected
+onto the set $\{H=0\}$ using Newton's method; the distances from these points to the surfaces are determined
+via the Lagrange system $p-b+\lambda\nabla H=0$, $H=0$. It was observed that comparing two grids
+yields incorrect convergence rates that depend on the specific grid used (e.g., $0.38$--$0.44$ instead of
+$0.5$ for the case $x^3+y^3+z^3+kx$, $k>0$).
+\item $\alpha$ is determined using the least-squares method in log-log coordinates,
+including a $95\,\%$ confidence interval.
+\item Stationary points: a complex-valued Newton's method is applied to the gradient system with a generic perturbation; the solutions are grouped into points with their respective multiplicities;
+the result is certified if the sum of the multiplicities reaches the value $\mu$ (all $2592$ computational processes were certified).
+\item $\mu$, $\tau$, bases of monomials, and essential parts determined using linear algebra
+over the ring modulo $\mathfrak m^N$, employing Nakayama's criterion to terminate the computation.
+\end{itemize}
+
+% =============================================================================
+\section{Results}
+
+\subsection{Rates}
+
+Table~\ref{tab:s-groups} summarizes the measured rates. The surfaces fall into five
+groups; within a group the rates coincide for the same perturbation.
+
+\begin{table}[!h]
+\centering
+\small
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{l c c c c}
+\toprule
+group & $G=1$ & essential linear & inessential linear & order $\ge2$ \\
+\midrule
+I: cubic cones ($\tilde E_6$) & $\tfrac13$ & $\tfrac12$ (both sides) & -- & $1$ \\
+II: $x^2+y^2-z^2+xyz$ ($A_1$) & $\tfrac12$ & -- & $1$ & $1$ \\
+III: $x^2+y^2+z^3$, $x^3+y^3+z^2+x^2$ ($A_2$) & $\tfrac13$ & $\tfrac12$ / $\tfrac34$ & $\tfrac23$ & $1$ \\
+IV: $x^2-y^2+z^3$ ($A_2$) & $\tfrac12$ & $\tfrac34$ (both sides) & $\approx0.93$ & $1$ \\
+V: $x^2+y^3+z^3$, $x^2+y^3-3yz^2$ ($D_4$) & $\tfrac13$ & $\tfrac12$ & $0.68$--$0.76$ & $1$ \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\caption{Measured rates ($k<0$ / $k>0$ where they differ), resolution $128$. For the
+cones every linear $G$ is essential; for $A_1$ none is.}
+\label{tab:s-groups}
+\end{table}
+
+\begin{itemize}
+    \item \textbf{Cones:} $\alpha=0.333$, $0.500$, $1.00$ to within $0.035$ (most within $0.002$),
+          independent of the grid, as the proposition predicts; the four cones differ
+          only in the constants $C$ (e.g.\ $C=1.163$ for $x^3+y^3+z^3+k$, attained
+          in the direction $(1,1,1)$).
+    \item \textbf{$A_1$:} only $G=1$ is essential; every $G$ with $G(0)=0$ is a shift
+          plus a constant of order $k^2$, hence $\alpha=1$.
+    \item \textbf{$A_2$, definite} ($x^2+y^2+z^3$): both ends of the range occur. For
+          $G=z$, $k<0$ creates real zeros $z=\pm\sqrt{|k|}$ ($\alpha=0.500$), $k>0$ does
+          not ($0.739\approx\tfrac34$). The inessential $G=x$ produces a spike
+          $(x+\tfrac k2)^2+y^2=\tfrac{k^2}4-z^3$ of height $(k^2/4)^{1/3}$:
+          $\alpha=0.660\approx\tfrac23$ (Figure~\ref{fig:s-exact}).
+          $x^3+y^3+z^2+x^2$ gives the same numbers with $y\leftrightarrow z$.
+    \item \textbf{$A_2$, indefinite} ($x^2-y^2+z^3$): same complex type, different real
+          behaviour: $\tfrac12$ for $G=1$, no spike, and $x+y$ \emph{moves} the cusp,
+          $(x+y)(x-y+k)+z^3$, to $(-\tfrac k2,\tfrac k2,0)$ with $\gamma=1$.
+    \item \textbf{$D_4$:} lower ends $\tfrac13$, $\tfrac12$; with three real lines
+          ($x^2+y^3-3yz^2$) both sides behave alike.
+\end{itemize}
+
+\subsection{Singular points}
+
+New singular points appear in few pairs, always where the theory predicts:
+\begin{itemize}
+    \item $x^3+y^3+z^3+k(x+y)$: two cusps at $(\pm s,\mp s,0)$, $s=\sqrt{|k|/3}$, for
+          $k<0$ only, $\gamma=0.500$ (Figure~\ref{fig:s-exact}); $x+y+z$ and $2x-y+3z$
+          create none, as the balance condition predicts;
+    \item balanced perturbations: two $A_1$ points, $\gamma=\tfrac12$, on all four cones;
+    \item $x^2+y^2-z^2$ on the Fermat cones: the origin becomes $A_1$ and two more
+          $A_1$ points move with $\gamma=1$ (three of eight units of $\mu$ real);
+    \item $x^2+y^3-3yz^2+ky$, $k>0$: the three lines separate into a line and a
+          hyperbola meeting at two $A_1$ points $(0,0,\pm\sqrt{k/3})$, $\gamma=\tfrac12$.
+\end{itemize}
+
+\begin{figure}[!h]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{c c c c}
+\panel{exact_E6a_xpy_neg.png} & \panel{exact_E6a_xpy_pos.png} &
+\panel{exact_A2a_x_pos.png} & \panel{exact_D4b_y_pos.png} \\
+{\footnotesize $x^3+y^3+z^3-0.01(x+y)$} & {\footnotesize $x^3+y^3+z^3+0.01(x+y)$} &
+{\footnotesize $x^2+y^2+z^3+0.01x$} & {\footnotesize $x^2+y^3-3yz^2+0.01y$} \\
+{\footnotesize plane $z=0$} & {\footnotesize plane $z=0$} & {\footnotesize plane $y=0$} & {\footnotesize plane $x=0$}
+\end{tabular}
+\end{adjustbox}
+\caption{Exact slices through $P$ on $[-0.18,0.18]^2$. Grey: $S_0$; blue: $S_k$;
+red: singular points from the certified search. From left: two cusps appear for
+$k<0$ but not for $k>0$; the inessential spike of the $A_2$ point; the two
+$A_1$ points of the $D_4$ point with three lines.}
+\label{fig:s-exact}
+\end{figure}
+
+\subsection{Direction sweep}
+\label{sec:s-sweep}
+
+For $G=c\cdot p$, $|c|=1$, the real stationary points with their Morse indices and
+signs of $H_k$ were computed on a grid of the sphere; boundaries between regions
+were bisected to locate the discriminant directions (where $S_k$ is singular).
+For $x^3+y^3+z^3$ this reproduces the balance curve and gives $c_z/c_x=2^{2/3}$ to
+$13$ digits on the meridian through $(1,1,0)$; for the non-diagonal cones it gives
+the balanced perturbations $x+y+2z$ and $x+y+2.6581z$, which were then confirmed by
+the family analysis. For homogeneous cubic $F$ and linear $G$ the discriminant
+directions are independent of $|k|$ (rescale by $\sqrt{|k|}$).
+
+\subsection{Deviations}
+
+Of $268$ fitted rates $15$ miss the prediction: $10$ where an essential part
+($\sim|k|^{3/4}$) and an inessential shift ($\sim|k|$) are both visible in
+$10^{-4}\le|k|\le10^{-2}$ (fitted $0.77$--$0.88$, asymptotically $\tfrac34$), and $5$
+on $D_4$ with deformations of order $|k|\cdot10^{-4}$, below the measurement
+resolution (about $1.5\cdot10^{-4}$, where the Lagrange system degenerates).
+
+\subsection{Marching Cubes near the singular point}
+
+The median extraction error decreases like $h$ (about a quarter of a cell).
+Two local failures are systematic: the spike of $x^2+y^2+z^3+kx$, narrower than a
+cell, is missing from every mesh (error $0.023$ at $h=0.00625$), and singular points
+that are not grid nodes are never mesh vertices (distance up to half a cell,
+decreasing with $h$).
+
+% =============================================================================
+\section{Mathematical conclusions}
+
+\begin{enumerate}
+    \item The convergence of $S_k$ to an isolated quasi-homogeneous singularity is
+          governed by the weighted scaling $\lambda=|k|^{1/(1-d_w(G))}$: the rate lies
+          in $[w_{\min},w_{\max}]/(1-d_w(G))$, and for homogeneous $F,G$ it is exactly
+          $1/(d-m)$ by self-similarity.
+    \item Which end of the range is attained is a real phenomenon: it depends on the
+          sign of $k$ and on the real form of the singularity (definite vs.\ indefinite
+          quadratic part, one vs.\ three real lines of the cubic part), not only on the
+          complex type.
+    \item First-order behaviour is determined by the essential part of $G$;
+          inessential perturbations only move the surface, but their second-order
+          effect can still be geometrically visible (spikes, moving singular points).
+    \item Singular points of $S_k$ are created only for special directions of $G$ (a
+          discriminant in the space of perturbations), never more than $\mu(F)$, and
+          can be located and counted reliably by conservation of the Milnor number.
+    \item For voxel extraction, the relevant length scale is $\lambda(k)$; uniform grids
+          fail precisely at features of size below $h$ near stationary points and at
+          singular points between grid nodes.
+\end{enumerate}
+
+\section{Next steps}
+
+\begin{itemize}
+    \item Compare Marching Cubes with Marching Tetrahedra and Dual Contouring using
+          the same exact-surface measures (the measurement pipeline accepts any mesh).
+    \item Develop the singularity-aware method: locate singular points by the
+          certified search, refine the grid towards them down to $\lambda(k)$, and
+          insert the singular point as a vertex (cone over the boundary curve, weighted
+          rays for quasi-homogeneous $F$).
+    \item Make the scaling principle rigorous for non-homogeneous $G$ and
+          quasi-homogeneous $F$ (beyond the exact homogeneous case).
+\end{itemize}
+
+\bibliographystyle{alpha}
+\bibliography{bibliography}
+
+\end{document}

@@ -1,0 +1,737 @@
+% !!! ALWAYS COMPILE THIS FILE !!!
+
+\documentclass[12pt, a4paper, oneside]{book}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 														%
+%  					 Basic formatting 					%
+% 														%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Page margins
+\usepackage[top=2.5cm, bottom=2.5cm, right=2cm, left=3.5cm]{geometry}
+
+% Line height
+\linespread{1.5}
+
+% !!! optional !!!  no hyphenation
+\tolerance=100000000
+\hyphenpenalty 10000000
+\exhyphenpenalty 10000000
+
+% Insert pdf
+\usepackage{pdfpages}
+
+% Charset
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
+% Common packages (math fonts, floats etc.)
+\usepackage{amsthm}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{float}
+\usepackage{array}
+\usepackage{pdflscape}
+\usepackage{calc}
+\usepackage[linesnumbered, ruled]{algorithm2e}
+\usepackage{caption}
+\usepackage{tikz}
+\usepackage{graphicx}
+\usepackage{comment}
+\usepackage{subcaption}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 													 %
+%  					Optional formatting 				 %
+% 													 %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Theorems
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+
+% Definitions and examples
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+
+% Remarks
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+% !!! optional !!!  Basic caption formatting
+\theoremstyle{definition}
+%\newtheorem{definition}{Definition}[chapter]
+
+\usepackage{caption}
+\captionsetup[figure]{labelfont=bf}
+
+
+% !!! optional !!! package for drawing graphs
+\usepackage{pgfplots}
+\pgfplotsset{width=14cm, height=10cm, compat=1.9}
+
+
+% !!! optional !!! package for displaying a code
+\usepackage{listings}
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.8,0.8,0.7}
+\definecolor{myteal}{rgb}{0.17,0.57,0.69}
+\definecolor{whitish}{rgb}{0.99, 0.99, 0.98}
+
+\lstset{frame=tb,
+  backgroundcolor=\color{whitish},
+  language=C++,
+  aboveskip=3mm,
+  belowskip=0mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\footnotesize\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{dkgreen},
+  stringstyle=\color{mauve},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3,  
+  emph={int,char,double,float,unsigned,void,bool,MyMesh, VertexIter, VertexVertexCCWIter, std, vector, VertexHandle, vec, AngleOf, max, min} ,
+  emphstyle={\color{teal}},
+  captionpos=b,
+  frame=single,	
+  rulecolor=\color{gray}
+}
+\renewcommand{\lstlistingname}{Code excerpt}
+\captionsetup[lstlisting]{labelfont=bf}
+\renewcommand\lstlistlistingname{Source codes}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 														%
+%  			 Information about the author 				%
+% 														%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\begin{document}
+
+% Intro pages are numbered by roman numerals
+\pagenumbering{arabic}
+
+% The good practice is to use separate .tex file for each chapter of the thesis which is placed in the same directory as the main.tex file
+
+%\input{intro.tex} % First pages -- mandatory !!!
+%\input{00-intro.tex} % Introduction is an unnumbered chapter
+\newpage
+\chapter{Implicit Surfaces and Singularities}
+
+
+\section{Implicit Surfaces}
+Implicit surfaces are defined as the set of points satisfying a scalar equation in three-dimensional space. They are used in computer graphics, geometric modeling, visualization, and numerical processing, and we will show their use in voxel-based methods and isosurface extraction algorithms \cite{bloomenthal2000implicit}.
+
+\begin{definition}
+\label{def:implicit-surface}
+Let $f : \mathbb{R}^3 \to \mathbb{R}$ be a scalar-valued function. The set
+\[
+S = \{ p \in \mathbb{R}^3 \mid f(p) = 0 \}
+\]
+is called an \emph{implicit surface} or \emph{zero set} of the function $f$.
+\end{definition}
+
+The function $f$ is commonly referred to as the \emph{implicit surface function}. Beyond
+identifying which points lie on the surface, the sign of $f$ classifies every point in
+space according to its position relative to the surface:
+\[
+f(p) < 0 \quad \text{inside the surface},
+\]
+\[
+f(p) > 0 \quad \text{outside the surface},
+\]
+\[
+f(p) = 0 \quad \text{on the surface}.
+\]
+
+This classification property is one of the major advantages of implicit representations
+over parametric approaches \cite{bloomenthal2000implicit}, as illustrated below.
+
+\begin{center}
+    \begin{tikzpicture}[scale=1.2, font=\small]
+        \useasboundingbox (-3.5,-2) rectangle (3.5,2.5);
+        \fill[blue!10] (0,0) circle (1.5);
+        \draw[very thick, teal] (0,0) circle (1.5);
+        \node[align=center] at (0,0) { $f(x,y,z) < 0$ \\ \scriptsize (Inside) };
+        \draw[<-, thick] (1.06, 1.06) -- (2.2, 2) node[right, align=left] {
+            $f(x,y,z) = 0$ \\
+            \scriptsize (Surface $S$)
+        };
+        \node[align=center] at (2.5, -1) { $f(x,y,z) > 0$ \\ \scriptsize (Outside) };
+    \end{tikzpicture}
+\end{center}
+
+To see why this representation is useful, it is helpful to compare it with the two other
+standard representations of surfaces. An explicit surface is represented as
+$z=f(x,y)$, which restricts it to height-field configurations, while a parametric surface
+defines each coordinate separately,
+\[
+x=f_x(s,t), \quad y=f_y(s,t), \quad z=f_z(s,t), \qquad (s,t)\in \text{parameter domain},
+\]
+giving direct access to points on the surface. Implicit surfaces instead treat all
+coordinates symmetrically, which allows more complex geometric structures and naturally
+supports merging, blending, and deformation operations \cite{bloomenthal2000implicit}.
+
+A natural question is when an implicit surface can locally be described as a smooth
+two-dimensional object. This is answered by the following classical result.
+
+\begin{theorem}
+Let $f : \mathbb{R}^3 \to \mathbb{R}$ be continuously differentiable in a neighborhood of
+a point $p=(x_0,y_0,z_0)$ with $f(p)=0$. If at least one partial derivative of $f$ is
+nonzero at $p$, then locally the surface can be expressed as an explicit function of two
+variables.
+\end{theorem}
+
+The theorem guarantees local regularity whenever the gradient does not vanish, which
+motivates the following distinction.
+
+\begin{definition}
+\label{def:regular-singular}
+A point $p$ on an implicit surface is called a \emph{regular point} if
+$\nabla f(p)\neq 0$. Otherwise, $p$ is called a \emph{singular point}.
+\end{definition}
+
+The gradient
+\[
+\nabla f(x,y,z)=
+\left(
+\frac{\partial f}{\partial x},
+\frac{\partial f}{\partial y},
+\frac{\partial f}{\partial z}
+\right)
+\]
+defines the local differential structure of the surface and its normal direction. At
+regular points this direction is well-defined and the surface locally resembles a smooth
+plane; at singular points this structure may break down entirely, which we discuss in
+Section~\ref{sec:singularities}.
+
+The most analytically tractable implicit surfaces are those defined by polynomial
+functions.
+
+\begin{definition}
+An implicit surface is called an \emph{algebraic surface} if the defining function $f$
+is polynomial.
+\end{definition}
+
+Algebraic surfaces are especially relevant for singularity analysis, because polynomial
+structure allows local geometric behavior to be studied through algebraic methods.
+
+An important practical property of implicit surfaces is their suitability for
+polygonization and voxel-based processing: since the surface is represented by samples
+of a scalar field, algorithms such as Marching Cubes and Dual Contouring can reconstruct
+polygonal approximations directly from volumetric data, which makes implicit
+representations well suited for scientific visualization, medical imaging, and adaptive
+geometric modeling \cite{bloomenthal2000implicit}. This combination of algebraic
+structure, differential properties, and numerical flexibility is what makes implicit
+surfaces a natural framework for studying singularity-aware isosurface extraction, the
+topic to which the rest of this chapter is devoted.
+
+\section{Differential and Algebraic Properties of Implicit Surfaces}
+
+Having introduced implicit surfaces as zero sets of a scalar function
+$f:\mathbb{R}^3 \rightarrow \mathbb{R}$, we now examine their differential properties in
+more detail, starting with the gradient.
+
+\subsection{Gradient and Normal Vector}
+
+The gradient of $f$ is the primary tool for extracting geometric information from an
+implicit surface: it encodes how the scalar field changes in each spatial direction and
+points perpendicularly to the level set of $f$.
+
+\begin{definition}[Implicit Surface Gradient]
+Let $f(x,y,z)$ be a differentiable scalar field. The gradient of $f$ is
+\[
+\nabla f(x,y,z) = \left(\frac{\partial f}{\partial x}, \frac{\partial f}{\partial y},
+\frac{\partial f}{\partial z}\right).
+\]
+\end{definition}
+
+\begin{theorem}[Surface Normal]
+If $\nabla f(p) \neq 0$, then the unit normal vector to the implicit surface at $p$ is
+\[
+\mathbf{n}(p) = \frac{\nabla f(p)}{\|\nabla f(p)\|}.
+\]
+\end{theorem}
+
+Recall from Definition~\ref{def:regular-singular} that regular points admit a
+well-defined normal direction, whereas singular points may not. We next examine how this
+translates into the existence of a tangent plane.
+
+\subsection{Tangent Planes and Local Smoothness}
+
+\begin{definition}[Tangent Plane]
+At a regular point $p_0$ on the implicit surface $f(x,y,z)=0$, the tangent plane is
+given by
+\[
+\nabla f(p_0) \cdot (p - p_0) = 0.
+\]
+\end{definition}
+
+A non-zero gradient therefore ensures local smoothness, and if $f$ is continuously
+differentiable, the implicit surface is locally a smooth 2-manifold
+\cite{bloomenthal2000implicit}. Beyond this first-order behavior, second-order
+derivatives determine how the surface curves.
+
+\subsection{Curvature and Local Geometric Behavior}
+
+\begin{definition}[Curvature Behavior]
+The curvature of an implicit surface is governed by the second-order derivatives of $f$, and is well-defined when $f$ is twice continuously differentiable and $\nabla f \neq 0$.
+\end{definition}
+
+Smooth implicit surfaces are therefore classified as $G^2$ continuous under appropriate regularity conditions \cite{bloomenthal2000implicit}. This regularity breaks down at singular points, where the gradient vanishes; we examine such points in detail in Section~\ref{sec:singularities}. As a first illustration, consider the cone
+\[
+f(x,y,z) = -x^2 + y^2 + z^2,
+\]
+whose apex at the origin is a singular point where the gradient vanishes, producing a degenerate geometric structure \cite{bloomenthal2000implicit} (Figure~\ref{fig:cone}).
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=0.4\textwidth]{pictures/cone.png}
+    \caption[Cone singularity]{The apex of a cone is a singular point (image retrieved
+    from \cite{bloomenthal2000implicit}).}
+    \label{fig:cone}
+\end{figure}
+
+\subsection{Algebraic Multiplicity and Geometric Behavior}
+
+The algebraic degree of the function $f$ appears to influence the geometry such as the number of intersections with other objects and the local geometry of algebraic surfaces. In general, surfaces with larger degrees will have more complex curvature and singular behaviour. A key relationship between algebraic and geometric structure is that higher algebraic multiplicity at a point may correspond to degeneracies or singularities in the geometry of the surface \cite{bloomenthal2000implicit}.
+
+The following result of this section summarizes the ideas which have been developed on implicit surfaces, leading to a clean sufficient condition for an implicit surface to be a smooth manifold.
+
+% [Manifold Condition]
+\begin{theorem}
+\label{thm:manifold}
+If $f$ is continuously differentiable and $0$ is a regular value of $f$, then the implicit surface $f^{-1}(0)$ is a 2-dimensional manifold embedded in $\mathbb{R}^3$.
+\end{theorem}
+
+This result ensures that, under regularity conditions, implicit surfaces behave as smooth geometric objects with well-defined local structure. The following section investigates what happens when this regularity fails.
+
+\section{Singularities of Implicit Surfaces}
+\label{sec:singularities}
+
+Recall that a point $p$ on an implicit surface $S=\{p \mid f(p)=0\}$ is \emph{singular} if $\nabla f(p) = 0$ (Definition~\ref{def:regular-singular}). By Theorem~\ref{thm:manifold}, singular points are precisely those where $S$ may fail to be locally manifold-like, since the surface normal and tangent plane are no longer well-defined there. The remainder of this chapter addresses two complementary questions about such points: how the underlying degeneracy can be resolved geometrically (Section~\ref{sec:blowup}), and how singular structures behave once the system is perturbed (Section~\ref{sec:unfolding}).
+
+\begin{comment}
+\subsection{Geometric Interpretation of Singularities}
+
+Geometrically, singularities correspond to locations where the surface loses local flatness, changes topology, or exhibits self-degeneracy, as in the cone example of Figure~\ref{fig:cone}. Such behavior is crucial in both theoretical geometry and numerical computation, as it affects stability in surface reconstruction and rendering algorithms \cite{bloomenthal2000implicit}. These degeneracies occur in several qualitatively distinct forms, which are classified below.
+
+
+\subsection{Types of Singular Behavior}
+
+These forms are best understood using the singularity theory of smooth mappings, which classifies them via local normal forms \cite{arnold2012singularities}.
+
+\begin{definition}[Types of singular behavior]
+The following local forms are commonly encountered:
+\begin{itemize}
+    \item \textbf{Cusp}: a smooth curve or surface locally forms a pointed tip,
+          typically from higher-order degeneracy of derivatives.
+    \item \textbf{Swallowtail}: a higher-order singularity with self-intersecting local
+          structure and a curvature-sign change in multiple directions.
+    \item \textbf{Pinch point}: two local sheets of a surface touch tangentially
+          without forming a smooth intersection.
+    \item \textbf{Higher-order degeneracy}: not only the first derivative but also
+          higher-order derivatives vanish or become linearly dependent, producing
+          complex local geometry.
+\end{itemize}
+\end{definition}
+
+These types can also be distinguished according to whether they affect only a small
+neighborhood of a point or the global topology of the surface.
+
+\subsection{Local versus Global Singular Structure}
+
+\begin{itemize}
+    \item \textbf{Local singularities} depend only on the behavior of $f$ in an
+          infinitesimal neighborhood of a point.
+    \item \textbf{Global singularities} affect the topology of the entire surface, such
+          as self-intersections or disconnected components.
+\end{itemize}
+
+While local singularities determine differential properties, global singular structures
+influence the topology and connectivity of the implicit surface. Beyond their theoretical
+interest, singularities have direct consequences for numerical methods that reconstruct
+implicit surfaces from sampled data.
+
+\subsection{Numerical Difficulties in Polygonization}
+
+Numerical procedures rely on the gradient to estimate normals and classify voxel cells,
+and both operations become unreliable when the gradient is close to zero. Near such
+points, numerical methods may fail due to unstable normal estimation, ambiguous cell
+classification, missed or duplicated surface components, and incorrect topology
+reconstruction.
+
+\begin{theorem}[Numerical Instability Near Singularities]
+Let $S = \{p \mid f(p)=0\}$ be an implicit surface and let $p_s$ be a singular point such
+that $\nabla f(p_s)=0$. Then numerical approximation of the surface normal and local
+topology near $p_s$ becomes ill-conditioned.
+\end{theorem}
+
+This instability is a fundamental limitation of discrete polygonization methods and
+motivates adaptive refinement techniques and alternative implicit evaluation strategies
+\cite{bloomenthal2000implicit}.
+
+\subsection*{Summary}
+
+Singularities represent points where the standard manifold structure of an implicit
+surface fails, producing both rich geometric phenomena (cusps, swallowtails, pinch
+points) and significant numerical challenges. The next two sections address,
+respectively, how such singularities can be resolved theoretically, and how they behave
+under perturbation; Chapter 2 then turns to how numerical algorithms can be made more
+robust in their presence.
+
+\section{Blowup and Resolution of Singularities}
+
+A natural question is whether singularities can be systematically resolved, that is, replaced by a smoother structure capturing the same geometric information without the degeneracy. Consider the context of piecewise smooth dynamical systems. For non-unique singularities such as the visible-invisible two-fold, the non-uniqueness suggests geometric desingularization methods such as regularization and blowup. These ideas are developed systematically in \cite{kristiansen2019resolution}, which combines geometric singular perturbation theory with blowup techniques to resolve non-hyperbolic behavior.
+
+\begin{definition}%[Motivation for desingularization]
+Let $X^\pm$ define a piecewise smooth vector field with switching manifold $\Sigma = \{y=0\}$. A singularity $q \in \Sigma$ is called \emph{non-deterministic} if the associated Filippov flow is not uniquely defined at $q$. Desingularization embeds the PWS system into a smooth family $X_\epsilon$ such that the limiting dynamics as $\epsilon \to 0^+$ recover the original system while resolving forward non-uniqueness.
+\end{definition}
+
+The central tool is the blowup transformation, which replaces a singular point with a
+higher-dimensional manifold capturing directional information of the flow, separating
+the different directions from which trajectories can approach it.
+
+\begin{definition}[Blowup in $\mathbb{R}^3$]
+Consider a singular point $y=\epsilon=0$. The blowup transformation introduces
+polar-type coordinates
+\[
+(y,\epsilon) = \rho(\bar{y}, \bar{\epsilon}), \quad (\bar{y},\bar{\epsilon}) \in S^1,
+\ \rho \geq 0,
+\]
+where $S^1 = \{(\bar{y},\bar{\epsilon}) \in \mathbb{R}^2 \mid \bar{y}^2 +
+\bar{\epsilon}^2 = 1\}$. Under this transformation, the singular point is replaced by the
+circle $S^1$, which encodes all possible directional approaches to the singularity.
+\end{definition}
+
+\begin{theorem}[Resolution via blowup and regularization \cite{kristiansen2019resolution}]
+Let $X_\epsilon$ be a regularized PWS system near a visible--invisible two-fold
+singularity $q$. Then, under the blowup transformation and appropriate directional
+charts, the system admits a desingularized vector field $X$ on the blown-up space.
+Moreover:
+\begin{itemize}
+    \item The singular two-fold point $q$ lifts to a circle of equilibria
+          $\bar{q} \cong S^1$.
+    \item The dynamics near $\bar{q}$ separates into invariant directional charts
+          corresponding to different asymptotic regimes.
+    \item Stable and unstable sliding regions of the original system correspond to
+          normally hyperbolic invariant manifolds in the blown-up space.
+    \item Loss of hyperbolicity at folds and two-folds becomes a geometric degeneracy
+          that can be resolved via local analysis in directional charts.
+\end{itemize}
+Consequently, forward evolution through the singularity can be uniquely extended in the
+regularized system.
+\end{theorem}
+
+To work concretely within the blown-up space, one introduces directional charts such as
+\[
+(y,\epsilon) = (\epsilon \hat{y}, \epsilon) \quad \text{or} \quad (y,\epsilon) =
+(y, y \hat{\epsilon}),
+\]
+which correspond to different regions of the blown-up sphere and allow the desingularized
+vector field to be expressed using standard dynamical systems tools. In the
+visible--invisible two-fold, for instance, trajectories entering the singularity are
+lifted to trajectories on the blown-up circle, where invariant objects such as canards
+and sliding flows become separated into distinct geometric objects that can be studied in
+a regular setting. In summary, the blowup method shows that singular dynamics in the
+original PWS system can be reinterpreted as smooth dynamics on a higher-dimensional
+manifold, where local topology is preserved under regularization while the fine structure
+of trajectories near the two-fold is governed by invariant manifolds in the blown-up
+space \cite{kristiansen2019resolution}.
+\end{comment}
+
+The analysis of piecewise smooth systems near non-unique singularities, such as the visible–invisible two-fold, requires techniques capable of resolving degeneracies where trajectories lack a unique forward evolution. In such systems, trajectories entering a two-fold point are associated with forward non-uniqueness, raising the question of how to continue orbits forward in time. Kristiansen and Hogan address this by combining regularization with geometric blowup to resolve the non-deterministic behavior \cite{kristiansen2019resolution}.
+
+\subsection{Regularization and the Singular System}
+
+A PWS system in $\mathbb{R}^n$ is defined by smooth vector fields $X^+$ and $X^-$ separated by a switching manifold $\Sigma = \{x : y = 0\}$. To replace the discontinuous system with a smooth one that recovers the original dynamics as $\epsilon \to 0$, a regularization is introduced:
+
+\begin{equation}
+    X_\epsilon(x) = \frac{1}{2}X^+(x)(1 + \phi(\epsilon^{-1}y)) + \frac{1}{2}X^-(x)(1 - \phi(\epsilon^{-1}y))
+\end{equation}
+
+where $\phi$ is a smooth, monotone regularization function. This process introduces a singular point at $\epsilon = 0$, where the vector field is not immediately well-defined in the limit -- it is precisely this point that the blowup transformation is designed to resolve.
+
+\subsection{The Blowup Transformation}
+
+The blowup transformation is a desingularization method that replaces a singular point with a higher-dimensional manifold, such as a circle or sphere, capturing the directional information of the flow. By "blowing up" the point $x=0$, trajectories that were collapsed at the singularity become separated on the new manifold, allowing their transitions to be studied in detail \cite{kristiansen2019resolution}.
+
+\begin{definition}
+Given a vector of positive integers $\alpha = (\alpha_1, \dots, \alpha_n)$ called weights, the weighted (or quasihomogeneous) blowup transformation is the mapping $\pi: [0, \infty) \times S^{n-1}_{\alpha} \to \mathbb{R}^n$ defined by
+
+\begin{equation}
+    (\rho, \bar{x}) \mapsto x = (\rho^{\alpha_1} \bar{x}_1, \dots, \rho^{\alpha_n} \bar{x}_n)
+\end{equation}
+
+where $S^{n-1}_{\alpha}$ is the unit $\alpha$-sphere.
+\end{definition}
+
+For the visible--invisible two-fold, this transformation blows up the singularity to the unit circle \cite{kristiansen2019resolution}.
+
+
+\subsection{Directional Charts and Coordinates}
+
+To analyze the dynamics on the blown-up manifold, the system is expressed in directional charts, which together form an atlas with smooth coordinate changes between overlapping regions. Each chart is obtained by setting a specific directional variable to a constant \cite{kristiansen2019resolution}:
+
+\begin{itemize}
+    \item \textbf{Chart $K_i^+$:} defined by the mapping $\bar{x}_i = 1$.
+    \item \textbf{Chart $K_i^-$:} defined by $\bar{x}_i = -1$.
+\end{itemize}
+
+These coordinate transformations allow the desingularized vector field to be studied using the standard tools of geometric singular perturbation theory.
+
+\subsection{Geometric Resolution and Results}
+
+The primary objective of this procedure is to determine whether certain orbits can be singled out, or "distinguished," among the candidates for forward evolution. In their investigation of the regularized visible--invisible two-fold, Kristiansen and Hogan establish a key technical result regarding the transition through the singularity.
+
+\begin{theorem}
+    Under appropriate assumptions, the forward flow of the regularized system admits a transition mapping between sections of the phase space that is well-defined and $C^1$ for sufficiently small $\epsilon > 0$.
+\end{theorem} 
+
+The blowup analysis thus reveals a unique distinguished forward orbit characterizing the transition through the two-fold. In this framework, singular dynamics are transformed into smooth dynamics on the higher-dimensional manifold, providing a rigorous geometric foundation for continuing orbits forward in time \cite{kristiansen2019resolution}.
+
+\section{Unfolding and Stability}
+\label{sec:unfolding}
+
+Blowup resolves the geometry of an individual singularity, but a complementary question is how singular structures behave once the system is perturbed. The term \emph{unfolding} captures this in the mathematical sense used in singularity theory: the qualitative change in a system's behavior as it is deformed near a singularity. A related but distinct notion, \emph{stability}, describes how persistently a system retains its structural or energetic configuration under such perturbation \cite{ibanez2005shil, soncini2007mechanical}. The two subsections below examine this pairing of unfolding and stability in two quite different settings -- first within dynamical systems, where it originates, and then, as an illustrative analogy, within structural biology.
+
+\subsection{Mathematical Unfolding of Singularities}
+
+An unfolding, in singularity theory and dynamical systems, is a parameterized family of systems that includes a singular, non-structurally-stable one. A system is structurally stable if it lies in the interior of its equivalence class within a topology defined on the space of dynamical systems; the collection of all non-structurally-stable systems is called the bifurcation set \cite{ibanez2005shil}.
+
+For a nilpotent singularity of codimension three in $\mathbb{R}^3$, the vector field $X$ vanishes at the origin with a linear part conjugate to
+\begin{equation}
+    J = \begin{pmatrix} 0 & 1 & 0 \\ 0 & 0 & 1 \\ 0 & 0 & 0 \end{pmatrix}.
+\end{equation}
+A generic three-parameter unfolding $X_\Lambda$, with parameters $\Lambda = (\lambda_1, \lambda_2, \lambda_3)$, can then be expressed in the normal form
+
+\begin{equation}
+    y \frac{\partial}{\partial x} + z \frac{\partial}{\partial y} + (\lambda + my + nz + x^2 + bxy + cxz + dy^2 + eyz + \alpha(x, y, z, \Lambda)) \frac{\partial}{\partial z}
+\end{equation}
+
+where $\alpha$ represents higher-order terms. The parameters $\lambda_i$ allow the system to "unfold," revealing complex behaviors such as heteroclinic cycles and Shil'nikov homoclinic orbits that are otherwise hidden at the singularity \cite{ibanez2005shil}.
+
+This mathematical sense of unfolding -- a family of systems deforming away from a degenerate one -- is not unique to dynamical systems. A structurally analogous idea appears in an entirely different field, structural biology, where the same vocabulary of "unfolding" and "stability" is used to describe how a molecule's three-dimensional configuration responds to applied force. The next subsection draws on this analogy purely for illustration; it does not extend the dynamical-systems theory above but offers a physical intuition for what it means for a stable configuration to be deformed away from equilibrium.
+
+\subsection{Physical and Mechanical Stability}
+
+In physical systems modeled as implicit structures -- such as molecular surfaces -- stability is often defined by a system's ability to maintain its tertiary structure by minimizing energy and surface exposure \cite{soncini2007mechanical}.
+
+\begin{itemize}
+    \item \textbf{Definition of stability:} Stability is characterized by the interaction between the system (e.g., a polypeptide) and its environment, where the hydrophobic effect is a dominant contributor.
+    \item \textbf{Unfolding process:} A forced unfolding is a dynamic process in which a folded configuration is subjected to elongation, causing a progressive loosening of structure. For instance, during the unfolding of alpha-actinin domains, the number of hydrogen bonds ($N_h$) markedly decreases (e.g., from 213 to 68 at 300\% elongation), while the hydrophobic surface available to the solvent increases by approximately 90\%.
+\end{itemize}
+
+The magnitude of the force $F(t)$ applied during a mechanical unfolding can be modeled using a harmonic potential,
+
+\begin{equation}
+    F(t) = k \cdot [vt - x(t)],
+\end{equation}
+
+where $k$ is the spring constant, $v$ is the pulling speed, and $x(t)$ is the coordinate of the system. This energetic perspective complements the mathematical view: while mathematical unfolding describes topological transitions in parameter space, mechanical stability describes the resilience of a physical geometric form against analogous transitions \cite{ibanez2005shil, soncini2007mechanical}.
+
+\subsection{Relation to Implicit Surface Reconstruction}
+
+Returning to the setting of implicit surfaces, the mathematical notion of unfolding developed in Section~\ref{sec:unfolding} is the one with direct bearing on isosurface reconstruction. A small perturbation of the scalar field -- from noise, discretization, or a change in parameters -- is itself an unfolding of the surface's defining function, and the bifurcation-set perspective of Section~\ref{sec:unfolding} explains why reconstruction algorithms such as Marching Cubes are sensitive to exactly such perturbations near a singular point: nearby parameter values can correspond to topologically inequivalent vector fields, and hence to differently triangulated surfaces. Because the qualitative behaviors uncovered by a generic unfolding are themselves structurally stable, a singularity in a distance field or density function does not need to be treated as an isolated, unrecoverable failure case: it instead resolves, under small perturbation, into one of finitely many well-understood local configurations, each of which corresponds to a smooth surface nearby. Chapter 2 returns to this idea concretely when discussing why isosurface extraction algorithms behave unpredictably near singular points of the scalar field.
+
+\begin{comment}
+[OMITTED FOR COMPILE TEST]
+\end{comment}
+
+
+\chapter{Numerical Isosurface Extraction}
+\section{Voxel Grids and Scalar Fields}
+
+A \emph{scalar field} is a function that assigns a scalar value to every point in a domain, typically $\mathbb{R}^3 \rightarrow \mathbb{R}$. In the context of isosurface extraction, the surface is implicitly defined as the set of points where the scalar field attains a constant value (iso-value), a representation fundamental to implicit modeling and surface extraction techniques \cite{bloomenthal1997introduction}.
+
+\begin{definition}
+Let $f:\mathbb{R}^3 \rightarrow \mathbb{R}$ be a continuous function. An isosurface $\mathcal{S}$ corresponding to an iso-value $c \in \mathbb{R}$ is
+\[
+\mathcal{S} = \{ \mathbf{x} \in \mathbb{R}^3 \mid f(\mathbf{x}) = c \}.
+\]
+\end{definition}
+
+This formulation underlies voxel-based representations used in surface extraction algorithms \cite{bloomenthal1997introduction,lorensen1998marching}. In practice, continuous scalar fields must be discretized for computation using a \emph{voxel grid}, where space is partitioned into a uniform lattice of cubic cells whose vertices store sampled values of the scalar field. The classical \emph{Marching Cubes} algorithm introduced a structured approach for evaluating scalar fields at grid vertices and reconstructing surfaces within each voxel \cite{lorensen1998marching}.
+
+\begin{definition}
+\textbf{A uniform voxel grid} partitions a bounded domain $\Omega \subset \mathbb{R}^3$ into
+equally sized cubes of side length $h$, where each vertex stores a sampled scalar value $f(\mathbf{x}_i)$.
+\end{definition}
+
+To reconstruct the scalar field at points other than grid vertices, the most common method is \emph{trilinear interpolation}, which linearly interpolates values along each axis.
+
+\begin{theorem}
+Let $f$ be sampled at the eight corners of a voxel. The trilinear interpolation function $f_h(\mathbf{x})$ is continuous inside the voxel and piecewise linear along each axis.
+\end{theorem}
+
+\begin{example}
+    Given voxel corner values $f_{000}, \dots, f_{111}$, the interpolated value at
+    $(x,y,z)$ is
+\[
+f_h(x,y,z) = \sum_{i,j,k \in \{0,1\}} f_{ijk}(1-x)^{1-i}x^i(1-y)^{1-j}y^j
+(1-z)^{1-k}z^k.
+\]
+\end{example}
+
+This scheme forms the basis of techniques used in isosurface extraction algorithms such as Marching Cubes \cite{lorensen1998marching}. However, uniform grids become inefficient when the scalar field varies significantly across the domain. Adaptive approaches address this by refining the grid only where required; \emph{Adaptively Sampled Distance Fields} are one such technique, employing hierarchical refinement of voxels based on local variation of the scalar field \cite{frisken2000adaptively}.
+
+\begin{definition}
+\textbf{An adaptive voxel grid} is a hierarchical decomposition of $\Omega$ into voxels of varying sizes, refined according to a local error criterion.
+\end{definition}
+
+Frisken et al.\ show that adaptive sampling significantly reduces memory usage without compromising surface quality, since refinement is performed only in regions of high curvature or rapid change in the scalar field \cite{frisken2000adaptively}.
+
+A further difficulty comes from the limited precision of floating-point arithmetic. When evaluating scalar fields near singularities or regions of high curvature, small numerical errors may lead to incorrect sign evaluation of $f(\mathbf{x}) - c$: if two nearby evaluations satisfy $f(\mathbf{x}) \approx c \pm \epsilon$, rounding errors may incorrectly classify voxel corners as inside or outside the surface, leading to topological inconsistencies in the extracted mesh. Goldberg emphasizes that floating-point arithmetic is not associative and can introduce significant rounding errors in geometric computations \cite{goldberg1991every}; such issues are particularly critical in isosurface extraction, where sign changes determine topology. Together, adaptive sampling and careful numerical treatment are what allow voxel grids to serve as a stable computational foundation for the isosurface extraction algorithms developed in the remainder of this chapter.
+
+\section{Marching Cubes}
+
+The Marching Cubes algorithm is a classical method for extracting a polygonal approximation of an isosurface from a discretized scalar field. Building on the voxel grid from the previous section, each cell is classified according to whether its vertices lie above or below the isosurface, and a predetermined triangulation is then chosen to represent the isosurface within that cell. The original formulation by Lorensen and Cline introduced a systematic way to convert volumetric scalar data into triangle meshes \cite{lorensen1998marching}.
+
+\begin{definition}
+Let a voxel cell have eight vertices $v_0, \dots, v_7$, each with scalar value
+$f(v_i)$. Given an iso-value $c$, each vertex is classified as
+\[
+\text{inside} \quad \text{if } f(v_i) \geq c, \qquad \text{outside} \quad \text{if }
+f(v_i) < c.
+\]
+\end{definition}
+
+This binary classification induces a bit-pattern (cube index) in $[0,255]$, which uniquely determines the triangulation configuration via a precomputed lookup table
+\cite{lorensen1998marching}.
+\begin{figure}[!h]
+    \centering
+        \begin{subfigure}{0.55\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{pictures/marching_cubes1.jpeg}
+        \end{subfigure}
+    \hspace{0.03\textwidth}
+        \begin{subfigure}{0.35\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{pictures/marching_cubes2.jpeg}
+        \end{subfigure}
+    \caption[Cube configurations]{Positive red regions contain positive black vertices and represent areas where the scalar value is above the isovalue. Green surfaces indicate the visible portion of the extracted isosurface, while dark red surfaces represent parts of the isosurface that are hidde behind the positive red regions in the 3D view (image retrieved from \cite{wenger2013}).}
+\label{fig:marching_cubes}
+\end{figure}
+
+\subsection{Edge Interpolation}
+
+Once the intersected edges of a voxel are identified through cell classification, the algorithm determines the precise coordinates where the isosurface crosses the grid. Because the scalar field is only sampled at discrete vertices, the exact intersection point must be approximated. Following the principles of piecewise-linear continuation, the Marching Cubes algorithm assumes that the scalar field $f$ varies linearly along each edge of the cube.
+
+If the scalar values at two adjacent vertices $v_a$ and $v_b$ lie on opposite sides of the isovalue $c$, there exists at least one point $\mathbf{p}$ on the segment $v_a v_b$ such that $f(\mathbf{p}) = c$.
+
+\begin{definition}
+\label{def:edge-interp}
+For an edge connecting vertices $v_a$ and $v_b$, with associated scalar values $s_a$ and $s_b$ and isovalue $\sigma$, the point $\mathbf{p}$ is defined as:
+\begin{equation}
+p = (1 - \alpha) v_a + \alpha v_b, \quad \text{where} \quad \alpha = \frac{\sigma - s_a}{s_b - s_a}
+\end{equation}
+The parameter $\alpha \in [0, 1]$ represents the normalized distance along the edge. This linear approximation is computationally efficient and ensures that the reconstructed mesh remains continuous across adjacent voxels.
+\end{definition}
+
+The mathematical validity of this interpolation depends on the local behavior of the scalar field near the edge. If the gradient $\nabla f$ is non-zero (a regular point), the surface is locally a differentiable manifold, and the linear approximation provides a first-order accurate reconstruction. Near a singular point, however, the denominator $s_b - s_a$ may approach zero, leading to numerical instability and ill-conditioned vertex placement. This is precisely the kind of sensitivity to small perturbations discussed in Section~\ref{sec:unfolding}: a singular point in the scalar field sits on the boundary of a bifurcation set \cite{ibanez2005shil}, so an arbitrarily small change in the sampled values can push the local configuration across it, producing a qualitatively different (and possibly incorrect) triangulation. Such regions therefore typically require higher-order interpolation or adaptive refinement to recover the correct local topology \cite{frisken2000adaptively}.
+
+
+\subsection{Ambiguities and Topological Inconsistencies}
+
+A well-known limitation of the original Marching Cubes algorithm is that the same cube configuration can yield multiple valid triangulations. For instance, a face with alternating inside/outside vertices admits two valid diagonal connections, and choosing the wrong one may result in a non-manifold surface. This happens because the triangulation is determined locally within each cell without any consistency check against adjacent cells (see Figure~\ref{fig:ambiguity_comparison}).
+
+\begin{figure}[!h]
+    \centering
+    \begin{subfigure}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{pictures/ambiguity.jpeg}
+        \caption{Ambiguous face configuration (image retrieved from \cite{brentzen2012})}
+        \label{fig:ambiguity2}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{pictures/ambiguity3.jpeg}
+        \caption{Two possible triangulations that yield a topologically correct isovalue surface (image retrieved from \cite{nielson1991asymptotic}).}
+        \label{fig:ambiguity3}
+    \end{subfigure}
+    \caption{Comparison of ambiguities in 2D and 3D.}
+    \label{fig:ambiguity_comparison}
+\end{figure}
+
+\begin{comment}
+[OMITTED FOR COMPILE TEST]
+\end{comment}
+
+\section{Marching Tetrahedra}
+
+The ambiguity issues in Marching Cubes are directly related to the hexahedral nature of its grid cells, which admits several possible triangulations in certain configurations. The Marching Tetrahedra algorithm eliminates such ambiguities by construction.
+
+A voxel is split into a set of disjoint tetrahedra, each consisting of four vertices selected among the eight cube vertices, partitioning the original cell into simplices. For a tetrahedron $t$ with vertices $v_0, v_1, v_2, v_3$ and scalar values $s_i$, an isosurface is extracted by linearly interpolating along edges where the scalar function crosses the iso-value $c$.
+
+Since a tetrahedron has only four vertices, the number of possible sign configurations is far smaller than the 256 cases of Marching Cubes: each tetrahedron can be triangulated using one of at most 16 possible sign configurations (see Figure~\ref{fig:marching_tetrahedra}).
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pictures/marching_tetrahedra.jpeg}
+    \caption[Tetrahedra configurations]{Tetrahedra configurations (image retrieved from \cite{wenger2013})} 
+    \label{fig:marching_tetrahedra}
+\end{figure} 
+
+The intersection points along the edges of a tetrahedron are found using the same interpolation formula as Definition~\ref{def:edge-interp}, now applied to tetrahedral edges instead of cube edges.
+
+Marching Tetrahedra guarantees that no face ambiguity occurs within a single simplex, ensuring locally consistent topology under correct interpolation assumptions -- in other words, it does not produce the face-based ambiguities seen in Marching Cubes. The trade-off is that tetrahedral techniques sacrifice geometric efficiency for topological robustness: a single cube in Marching Cubes may produce up to 5 triangles per case, whereas its tetrahedral decomposition produces a larger number of triangles due to multiple simplex interpolations, though every tetrahedron is guaranteed to yield a consistent triangulation \cite{nielson2008dual}.
+
+Despite this robustness, the larger number of generated primitives leads to denser meshes than Marching Cubes, and inconsistent global triangulation can still occur if neighboring cubes use different subdivision schemes. Overall, Marching Tetrahedra trades geometric efficiency for topological robustness in ambiguous and numerically difficult situations.
+
+\section{Dual Contouring}
+
+In both Marching Cubes and Marching Tetrahedra, surface vertices lie on the grid edges and are located through interpolation, which cannot represent sharp geometric features such as edges or corners because interpolation inherently smooths them out. Dual Contouring, introduced by Ju et al.\ \cite{ju2002dual}, addresses this by replacing edge-based placement with optimization-based placement: instead of lying on a grid edge, each surface vertex is placed inside the cell, at the position that best minimizes a geometric energy function built from the local geometry of the surface.
+
+For a regular voxel grid, the dual grid has one vertex per grid cell rather than one per grid corner; each dual vertex corresponds to a local approximation of the isosurface within that cell. The data used to position each dual vertex is captured by Hermite data.
+
+\begin{definition}
+    \textbf{Hermite Data} is a set of samples associated with grid edges where the isosurface is intersected, consisting of intersection points $\mathbf{p}_i$, surface normals $\mathbf{n}_i$, and optionally gradient estimates of the scalar field.
+\end{definition}
+
+These values provide both positional and differential information crucial for accurate reconstruction. The edge intersection points themselves are computed using the same linear interpolation formula as in Marching Cubes (Definition~\ref{def:edge-interp}), but unlike Marching Cubes, Dual Contouring does not place vertices directly at these points; instead, it uses them as constraints in an optimization problem.
+
+\subsection{Quadratic Error Function (QEF)}
+
+The optimization problem to find the position of each dual vertex is based on the Quadratic Error Function that computes the point in the cell that best satisfies all local tangent plane constraints simultaneously.
+
+\begin{definition}
+\textbf{(QEF)}
+Given Hermite constraints $(\mathbf{p}_i, \mathbf{n}_i)$, the QEF is
+\[
+E(\mathbf{x}) = \sum_i \left( \mathbf{n}_i \cdot (\mathbf{x} - \mathbf{p}_i) \right)^2.
+\]
+\end{definition}
+
+The optimal vertex position $\mathbf{x}^* = \arg\min_{\mathbf{x}} E(\mathbf{x})$ minimizes the squared distance to all tangent planes defined by the Hermite data. This least-squares formulation enables a stable and efficient computation of vertex positions while preserving geometric detail \cite{ju2002dual}.
+
+One of the most important advantages of Dual Contouring is its ability to preserve sharp edges and corners, which the Marching Cubes algorithm instead smooths out through interpolation. Feature-sensitive reconstruction requires explicit handling of discontinuities in the surface normal field, achieved by incorporating Hermite constraints directly into vertex positioning \cite{kobbelt2001feature}.
+
+In regions where Hermite constraints are sparse or poorly conditioned -- for instance, when normals are nearly parallel or intersection points nearly collinear -- the QEF may become ill-defined. Achieving stability in such degenerate cases requires regularization techniques such as positional constraints or clamping the solution \cite{ju2002dual}. Modern extensions to adaptive grids allow higher resolution only where needed; adaptive dual contouring leads to substantial memory savings without compromising sharp feature retention.
+
+With precise Hermite data, the vertices obtained through QEF minimization lie very close to the isosurface while retaining the first-order geometry of edges and corners. Dual Contouring thus shifts from interpolation-based surface extraction to optimization-based reconstruction using Hermite data, enabling superior feature preservation and more flexible topology handling \cite{ju2002dual,kobbelt2001feature}.
+
+\section{Differential Properties in Polygonization}
+\begin{comment}
+[OMITTED FOR COMPILE TEST]
+\end{comment}
+
+
+\newpage
+
+\bibliographystyle{alpha}
+\bibliography{bibliography}
+
+\end{document}
