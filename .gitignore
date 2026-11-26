@@ -36,3 +36,19 @@ experiments_thesis
 # Editor / OS
 imgui.ini
 .DS_Store
+
+# Thesis: old archive and LaTeX build files
+Thesis_01.zip
+*.aux
+*.log
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+*.bbl
+*.blg
+*.toc
+*.lof
+*.lot
+*.lol
+*.out
+.DS_Store
